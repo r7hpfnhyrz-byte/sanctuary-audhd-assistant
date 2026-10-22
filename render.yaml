@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: sanctuary-audhd-assistant
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 8765
+      - key: TIMEZONE
+        value: Europe/London
+      - key: BRIEFING_TIME_LOCAL
+        value: "07:30"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false

@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sanctuary • AuDHD Personal Assistant & Executive Coach</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- Subtle Dopamine Toast & Confetti Layer -->
+  <div id="toast-container" class="toast-container" aria-live="polite"></div>
+  <canvas id="confetti-canvas" class="confetti-canvas"></canvas>
+
+  <div class="app-shell">
+    <!-- Minimalistic Top Bar: Capacity Switcher + Dopamine Progress + Quick-Win Roulette -->
+    <header class="topbar">
+      <div class="brand-cluster">
+        <div class="brand-logo" aria-hidden="true">✦</div>
+        <div>
+          <div class="brand-title-row">
+            <h1 class="brand-title">Sanctuary</h1>
+            <span class="cloud-pill" title="24/7 Cloud Sync & Direct File/Task Deep-Links Active">
+              <span class="pulse-dot"></span> Direct Task Links Active
+            </span>
+          </div>
+          <p class="brand-subtitle" id="current-date-label">AuDHD Personal Assistant &amp; Executive Coach</p>
+        </div>
+      </div>
+
+      <!-- Energy / Spoon Mode Switcher -->
+      <div class="spoon-switcher" role="group" aria-label="Current Energy and Spoon Capacity">
+        <span class="spoon-label">Brain State:</span>
+        <button class="spoon-btn" data-mode="high" onclick="App.setEnergyMode('high')" title="High bandwidth — protect deep work & tackle the Daily Boss">
+          ⚡ High Focus
+        </button>
+        <button class="spoon-btn active" data-mode="steady" onclick="App.setEnergyMode('steady')" title="Balanced pacing — Rule of 3 & transition buffers">
+          🌱 Steady
+        </button>
+        <button class="spoon-btn" data-mode="low_spoons" onclick="App.setEnergyMode('low_spoons')" title="Overwhelmed or low energy — activates Grace Shield & hides 80% of noise">
+          🔋 Low Spoons
+        </button>
+      </div>
+
+      <!-- Dopamine & XP HUD + Quick-Win Roulette -->
+      <div class="hud-cluster">
+        <button class="roulette-btn" onclick="App.spinRoulette()" title="Stuck in task paralysis? Spin for a single 60-second effortless dopamine win">
+          🎲 <span>60s Quick-Win</span>
+        </button>
+
+        <div class="xp-card" onclick="App.switchTab('vault')" title="Click to view your Trophy & Accomplishment Vault">
+          <div class="xp-top-row">
+            <span class="level-badge" id="hud-level">Lv 4 • Dopamine Alchemist</span>
+            <span class="streak-pill" id="hud-streak" title="Momentum Ring (Protected by Grace Shields on Low-Spoons days)">
+              🔥 5d <span id="hud-shield-icon">🛡️</span>
+            </span>
+          </div>
+          <div class="xp-bar-track">
+            <div class="xp-bar-fill" id="hud-xp-fill" style="width: 40%;"></div>
+          </div>
+          <div class="xp-sub-row">
+            <span id="hud-xp-text">340 XP</span>
+            <span id="hud-next-xp">60 XP to Lv 5</span>
+          </div>
+        </div>
+
+        <button class="icon-btn" onclick="App.toggleTheme()" title="Switch Calm Light / Cozy Dark Theme" id="theme-toggle-btn">
+          🌙
+        </button>
+        <button class="icon-btn" onclick="App.openAccountsModal()" title="Manage Connected Google, Outlook & Notion Accounts">
+          ⚙️
+        </button>
+      </div>
+    </header>
+
+    <!-- Sticky Pinned Active Task Bar (Appears if you open a file without auto-completing so you never hunt for it!) -->
+    <div id="pinned-task-bar" class="pinned-task-bar hidden">
+      <div class="pinned-task-info">
+        <span class="pinned-badge">🎯 CURRENTLY OPEN IN ANOTHER WINDOW</span>
+        <strong id="pinned-task-title">Task Title</strong>
+        <span id="pinned-task-target" class="source-tag"></span>
+      </div>
+      <div class="pinned-task-actions">
+        <button class="btn-primary" id="pinned-complete-btn">✓ Done! Complete &amp; Claim XP</button>
+        <button class="btn-secondary" id="pinned-reopen-btn">↗ Re-Open File/Link</button>
+        <button class="btn-ghost" onclick="App.clearPinnedTask()">Dismiss</button>
+      </div>
+    </div>
+
+    <!-- Quick-Win Roulette Modal Drawer -->
+    <div id="roulette-banner" class="roulette-banner hidden">
+      <div class="roulette-content">
+        <div class="roulette-tag">🎰 PARALYSIS BREAKER • 1-CLICK LAUNCH &amp; AUTO-COMPLETE</div>
+        <h3 id="roulette-headline">Loading quick win...</h3>
+        <p id="roulette-action"></p>
+      </div>
+      <div class="roulette-actions">
+        <button class="btn-primary" id="roulette-do-btn">🚀 Launch &amp; Auto-Complete (+XP)</button>
+        <button class="btn-ghost" onclick="App.spinRoulette()">Spin Another 🎲</button>
+        <button class="btn-ghost" onclick="App.closeRoulette()">Close</button>
+      </div>
+    </div>
+
+    <!-- Main Navigation Pills (Minimalistic 5-Pillar Architecture) -->
+    <nav class="main-nav" aria-label="Workspace Sections">
+      <button class="nav-tab active" data-tab="briefing" onclick="App.switchTab('briefing')">
+        🌅 Daily Briefing &amp; Horizons
+      </button>
+      <button class="nav-tab" data-tab="inbox" onclick="App.switchTab('inbox')">
+        ✉️ Triage &amp; Draft Studio <span class="nav-count" id="nav-email-count">4</span>
+      </button>
+      <button class="nav-tab" data-tab="sandbox" onclick="App.switchTab('sandbox')">
+        💡 Shiny Object Sandbox <span class="nav-badge-xp">+25 XP</span>
+      </button>
+      <button class="nav-tab" data-tab="coach" onclick="App.switchTab('coach')">
+        🧠 AuDHD Coach &amp; Focus Timer
+      </button>
+      <button class="nav-tab" data-tab="vault" onclick="App.switchTab('vault')">
+        🏆 Accomplishment Vault <span class="nav-count" id="nav-vault-count">7</span>
+      </button>
+    </nav>
+
+    <!-- =====================================================================
+         VIEW 1: DAILY BRIEFING & 4-HORIZON PROACTIVE RADAR (1d, 2d, 1w, 1m)
+         ===================================================================== -->
+    <main id="tab-briefing" class="tab-view active">
+      <!-- Coach's Calm Morning Synthesis Banner -->
+      <section class="coach-briefing-hero">
+        <div class="coach-hero-left">
+          <div class="coach-eyebrow">ZERO-FRICTION EXECUTION • CLICK ANY ITEM TO OPEN &amp; AUTO-COMPLETE</div>
+          <p class="coach-headline-text" id="briefing-headline">Scanning your calendars, inboxes, and Notion workspaces...</p>
+          <div class="account-pills-row" id="connected-accounts-strip"></div>
+        </div>
+        <div class="sensory-weather-card">
+          <div class="weather-title">Sensory &amp; Social Battery Radar</div>
+          <div class="weather-meters">
+            <div class="meter-row">
+              <span>Social Masking Load</span>
+              <span id="weather-social-val" class="meter-val">7.0 / 10</span>
+            </div>
+            <div class="meter-bar"><div id="weather-social-fill" class="meter-fill social" style="width:70%"></div></div>
+            <div class="meter-row">
+              <span>Cognitive Switch Load</span>
+              <span id="weather-cog-val" class="meter-val">7.5 / 10</span>
+            </div>
+            <div class="meter-bar"><div id="weather-cog-fill" class="meter-fill cog" style="width:75%"></div></div>
+          </div>
+          <p class="weather-tip" id="weather-status-label">Moderate load — transition buffers added</p>
+        </div>
+      </section>
+
+      <!-- Daily Boss Battle Card (Turns the #1 dreaded task into a 3x XP reward) -->
+      <section id="daily-boss-container" class="daily-boss-section"></section>
+
+      <!-- 4-Horizon Selector (Progressive Disclosure: only see 1 time horizon at a time!) -->
+      <section class="horizon-section">
+        <div class="section-header-bar">
+          <div>
+            <h2 class="section-title">Proactive Horizon Radar</h2>
+            <p class="section-subtitle">Every item links directly to the actual file, calendar event, or email draft—and can auto-complete on launch so you never have to come back to tick a box.</p>
+          </div>
+          <div class="horizon-pills" role="tablist">
+            <button class="horizon-pill active" data-horizon="1d" onclick="App.selectHorizon('1d')">
+              Today (24h) <span class="pill-count" id="h-count-1d">0</span>
+            </button>
+            <button class="horizon-pill" data-horizon="2d" onclick="App.selectHorizon('2d')">
+              Tomorrow &amp; 48h <span class="pill-count" id="h-count-2d">0</span>
+            </button>
+            <button class="horizon-pill" data-horizon="1w" onclick="App.selectHorizon('1w')">
+              Next 7 Days <span class="pill-count" id="h-count-1w">0</span>
+            </button>
+            <button class="horizon-pill" data-horizon="1m" onclick="App.selectHorizon('1m')">
+              Next 30 Days <span class="pill-count" id="h-count-1m">0</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="horizon-grid">
+          <!-- Left: Proactive Preparation Suggestions for Selected Horizon -->
+          <div class="horizon-column">
+            <h3 class="column-heading" id="horizon-prep-heading">Proactive Prep &amp; 1-Click Launch</h3>
+            <div id="horizon-suggestions-list" class="card-stack"></div>
+          </div>
+
+          <!-- Right: Unified Calendar Timeline & Transition Buffers -->
+          <div class="horizon-column">
+            <h3 class="column-heading" id="horizon-cal-heading">Schedule &amp; Linked Meeting Docs</h3>
+            <div id="horizon-events-list" class="card-stack"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- =====================================================================
+         VIEW 2: MULTI-INBOX EMAIL TRIAGE & PROACTIVE DRAFT STUDIO
+         ===================================================================== -->
+    <main id="tab-inbox" class="tab-view">
+      <section class="section-intro-card">
+        <div>
+          <div class="coach-eyebrow">ZERO BLANK-PAGE PARALYSIS • GMAIL &amp; EMPLOYER-SAFE OUTLOOK STUDIO</div>
+          <h2 class="section-title">Proactive Email Triage &amp; Draft Studio</h2>
+          <p class="section-subtitle" style="margin-bottom:14px;">
+            Your connected Gmail inboxes triage automatically. And for <strong>employer-locked Outlook emails</strong> (where IT blocks external APIs), paste any tricky email below—Claude &amp; Gemini will summarize what they actually want in 1 calm sentence and draft your reply immediately!
+          </p>
+          <form class="sandbox-form" onsubmit="App.submitCustomEmailTriage(event)" style="margin-top:8px;">
+            <div class="sandbox-input-row">
+              <input type="text" id="custom-email-sender" class="input-clean" placeholder="Sender name (e.g. 'Sarah / DfE Line Manager')" />
+              <input type="text" id="custom-email-subject" class="input-clean" placeholder="Subject / Topic" />
+            </div>
+            <textarea
+              id="custom-email-body"
+              class="textarea-clean"
+              rows="2"
+              placeholder="Paste any work email thread here that you are avoiding or need a fast, well-worded reply for..."
+              required
+            ></textarea>
+            <div class="sandbox-submit-row">
+              <span class="sandbox-hint">🔒 100% IT-Policy Safe — no employer OAuth login required.</span>
+              <button type="submit" class="btn-primary" id="custom-email-btn">
+                ⚡ Summarize &amp; Draft Reply For Me
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <div id="triage-email-list" class="email-studio-stack"></div>
+    </main>
+
+    <!-- =====================================================================
+         VIEW 3: THE "SHINY OBJECT" IDEA SANDBOX & AUTONOMOUS INCUBATOR
+         ===================================================================== -->
+    <main id="tab-sandbox" class="tab-view">
+      <section class="sandbox-capture-hero">
+        <div class="sandbox-hero-header">
+          <div>
+            <div class="coach-eyebrow">PREVENT SIDE-QUEST HIJACKING • +25 XP FOCUS PROTECTED BONUS</div>
+            <h2 class="section-title">The "Shiny Object" Idea Sandbox &amp; Incubator</h2>
+            <p class="section-subtitle">
+              When a weird and wonderful idea strikes mid-day, don't let it derail your actual priorities—and don't lose the magic either! Park it here in 10 seconds. You earn <strong>+25 XP immediately for protecting your focus</strong>, while your background AI agent (Gemini + Claude) researches feasibility, stress-tests it, and writes a full Concept Dossier for your weekend curiosity window.
+            </p>
+          </div>
+        </div>
+
+        <form class="sandbox-form" onsubmit="App.submitIdea(event)">
+          <div class="sandbox-input-row">
+            <input
+              type="text"
+              id="idea-title-input"
+              class="input-clean"
+              placeholder="Name your weird &amp; wonderful idea (e.g. 'Gamified peer supervision swap platform')..."
+              required
+            />
+            <select id="idea-category-input" class="select-clean">
+              <option value="Wild Spark">✨ Wild Spark</option>
+              <option value="Spire / Clinical Innovation">🌱 Spire / Therapy Innovation</option>
+              <option value="Selrok / Tech Venture">🚀 Selrok / Tech Concept</option>
+              <option value="Property / Investment">🏡 Property / Income Idea</option>
+            </select>
+          </div>
+          <textarea
+            id="idea-spark-input"
+            class="textarea-clean"
+            rows="2"
+            placeholder="Brain-dump the raw thought in 1–2 messy sentences — the AI Incubator Agent will do all the research and structuring for you..."
+          ></textarea>
+          <div class="sandbox-submit-row">
+            <span class="sandbox-hint">🛡️ Parking an idea keeps it 100% off your daily To-Do list while developing it in Notion &amp; your Sandbox.</span>
+            <button type="submit" class="btn-primary" id="idea-submit-btn">
+              🧪 Park Idea &amp; Dispatch AI Agent (+25 XP)
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section class="sandbox-gallery-section">
+        <h3 class="column-heading">Incubated Idea Dossiers (Researched Autonomously For You)</h3>
+        <div id="idea-dossier-list" class="dossier-grid"></div>
+      </section>
+    </main>
+
+    <!-- =====================================================================
+         VIEW 4: EXPERT AuDHD COACH, MICRO-STEP BREAKER & BODY-DOUBLING TIMER
+         ===================================================================== -->
+    <main id="tab-coach" class="tab-view">
+      <div class="coach-workspace-grid">
+        <!-- Left: Interactive AuDHD Coach Chat -->
+        <section class="coach-chat-card">
+          <div class="coach-chat-header">
+            <div>
+              <div class="coach-eyebrow">NEURO-AFFIRMING EXECUTIVE FUNCTION COACH (CLAUDE + GEMINI)</div>
+              <h2 class="section-title">AuDHD Coaching Studio</h2>
+            </div>
+            <div class="quick-prompt-pills">
+              <button class="chip-btn" onclick="App.sendQuickCoach('I am frozen in task paralysis right now. Help me start gently.')">
+                🧊 Stuck in paralysis
+              </button>
+              <button class="chip-btn" onclick="App.sendQuickCoach('I feel overwhelmed by everything on my plate today. Help me strip it back.')">
+                🌊 Feeling overwhelmed
+              </button>
+              <button class="chip-btn" onclick="App.sendQuickCoach('I have a weird new idea and I am tempted to abandon my schedule to research it.')">
+                ✨ Shiny object temptation
+              </button>
+            </div>
+          </div>
+
+          <div id="coach-messages-box" class="coach-messages-box"></div>
+
+          <form class="coach-input-bar" onsubmit="App.submitCoachMessage(event)">
+            <input
+              type="text"
+              id="coach-input"
+              class="input-clean"
+              placeholder="Tell your coach how your brain is feeling, ask to rescope your afternoon, or talk through a block..."
+            />
+            <button type="submit" class="btn-primary">Ask Coach</button>
+          </form>
+        </section>
+
+        <!-- Right: Body-Doubling Focus Sprint Timer + Instant Micro-Step Decomposer -->
+        <aside class="coach-tools-column">
+          <!-- Tool 1: Visual Body-Doubling Timer -->
+          <div class="tool-card">
+            <div class="coach-eyebrow">TIME-BLINDNESS ANCHOR • BODY DOUBLING</div>
+            <h3 class="tool-card-title">⏱️ Gentle Focus Sprint Timer</h3>
+            <p class="tool-card-desc">
+              AuDHD brains work best with short, bounded sprints where you have explicit permission to stop when the chime rings.
+            </p>
+            <div class="timer-display" id="focus-timer-display">15:00</div>
+            <div class="timer-presets">
+              <button class="chip-btn" onclick="App.setTimerMinutes(5)">5m Micro-Start</button>
+              <button class="chip-btn active" onclick="App.setTimerMinutes(15)">15m Sprint</button>
+              <button class="chip-btn" onclick="App.setTimerMinutes(25)">25m Deep Wave</button>
+            </div>
+            <div class="timer-controls">
+              <button class="btn-primary" id="timer-start-btn" onclick="App.toggleTimer()">▶ Start Body-Doubling Sprint (+30 XP)</button>
+              <button class="btn-ghost" onclick="App.resetTimer()">Reset</button>
+            </div>
+          </div>
+
+          <!-- Tool 2: 1-Click Task Decomposer -->
+          <div class="tool-card">
+            <div class="coach-eyebrow">EXECUTIVE DYSFUNCTION BREAKER</div>
+            <h3 class="tool-card-title">🔨 Shrink Any Daunting Task</h3>
+            <p class="tool-card-desc">
+              Paste anything you're avoiding and I'll break it into 4 tiny steps—starting with a 60-second zero-friction move.
+            </p>
+            <form onsubmit="App.breakDownCustomTask(event)" class="micro-breaker-form">
+              <input
+                type="text"
+                id="custom-task-input"
+                class="input-clean"
+                placeholder="e.g. 'Prepare UnLtd grant budget spreadsheet'"
+                required
+              />
+              <button type="submit" class="btn-secondary">Break Into 60s Steps</button>
+            </form>
+            <ol id="custom-micro-steps-list" class="micro-steps-list"></ol>
+          </div>
+        </aside>
+      </div>
+    </main>
+
+    <!-- =====================================================================
+         VIEW 5: ACCOMPLISHMENT & CLEARED VAULT (DAY / WEEK / MONTH / YEAR)
+         ===================================================================== -->
+    <main id="tab-vault" class="tab-view">
+      <section class="vault-hero-card">
+        <div class="vault-hero-top">
+          <div>
+            <div class="coach-eyebrow">CURE FOR ADHD "PRODUCTIVITY AMNESIA" • SYNCED TO NOTION</div>
+            <h2 class="section-title">The Accomplishment &amp; Cleared Vault</h2>
+            <p class="section-subtitle" id="vault-celebration-summary">
+              Loading your historical wins across Day, Week, Month, and Year...
+            </p>
+          </div>
+          <div class="vault-actions-cluster">
+            <button class="btn-secondary" onclick="App.syncVaultToNotion()">
+              📓 Sync Briefing &amp; Vault to Notion Now
+            </button>
+          </div>
+        </div>
+
+        <!-- Lookback Time Window Filter (Day / Week / Month / Year) -->
+        <div class="vault-filter-bar">
+          <div class="horizon-pills" role="tablist">
+            <button class="horizon-pill" data-vault-window="day" onclick="App.loadVault('day')">
+              Today (24h) <span class="pill-count" id="v-count-day">0</span>
+            </button>
+            <button class="horizon-pill active" data-vault-window="week" onclick="App.loadVault('week')">
+              This Week (7d) <span class="pill-count" id="v-count-week">0</span>
+            </button>
+            <button class="horizon-pill" data-vault-window="month" onclick="App.loadVault('month')">
+              This Month (30d) <span class="pill-count" id="v-count-month">0</span>
+            </button>
+            <button class="horizon-pill" data-vault-window="year" onclick="App.loadVault('year')">
+              This Year (365d) <span class="pill-count" id="v-count-year">0</span>
+            </button>
+          </div>
+
+          <div class="vault-kpi-strip">
+            <div class="kpi-pill">✨ <strong id="vault-kpi-xp">0</strong> XP Earned</div>
+            <div class="kpi-pill">⚔️ <strong id="vault-kpi-bosses">0</strong> Bosses Defeated</div>
+            <div class="kpi-pill">✉️ <strong id="vault-kpi-emails">0</strong> Emails Handled</div>
+            <div class="kpi-pill">🛡️ <strong id="vault-kpi-ideas">0</strong> Ideas Parked</div>
+          </div>
+        </div>
+
+        <!-- Unlocked Trophy Badges -->
+        <div id="vault-badges-row" class="badges-strip"></div>
+      </section>
+
+      <section class="vault-timeline-section">
+        <h3 class="column-heading" id="vault-list-heading">Cleared Items &amp; Wins Archive (Click Any Item to Re-Open Its File/Doc)</h3>
+        <div id="vault-items-list" class="card-stack"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- =====================================================================
+       MODAL: MULTI-ACCOUNT CONNECTOR & AI ENGINE SETTINGS
+       ===================================================================== -->
+  <div id="accounts-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <div class="coach-eyebrow">MULTI-ACCOUNT REGISTRY &amp; DUAL AI ENGINE</div>
+          <h2>Connected Inboxes, Calendars &amp; Notion Workspaces</h2>
+        </div>
+        <button class="icon-btn" onclick="App.closeAccountsModal()">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <h3 class="modal-section-title">Active Multi-Account Connections</h3>
+        <div id="modal-accounts-list" class="modal-accounts-list"></div>
+
+        <hr class="modal-divider" />
+
+        <h3 class="modal-section-title">Connect a Live Account (Zero Cloud-Console Red Tape!)</h3>
+        <form onsubmit="App.addAccount(event)" class="modal-form">
+          <div class="modal-form-grid">
+            <select id="acc-provider" class="select-clean" required>
+              <option value="google">Google (Gmail &amp; Google Calendar)</option>
+              <option value="microsoft">Microsoft 365 / Outlook (Mail &amp; Calendar)</option>
+              <option value="notion">Notion Workspace (Command Centre &amp; Vault)</option>
+            </select>
+            <input type="text" id="acc-label" class="input-clean" placeholder="Label (e.g. 'Spire Gmail' or 'Consultancy Outlook')" required />
+            <input type="text" id="acc-identifier" class="input-clean" placeholder="Email Address or Notion Workspace Name" required />
+            <input type="password" id="acc-token" class="input-clean" placeholder="Notion Secret (ntn_...) or OAuth Token" />
+            <input type="url" id="acc-ics" class="input-clean" placeholder="Calendar Private iCal (.ics) Feed URL (optional)" />
+            <input type="password" id="acc-app-pass" class="input-clean" placeholder="Gmail/Outlook App Password for live IMAP/SMTP (optional)" />
+          </div>
+          <div class="card-actions-row">
+            <button type="submit" class="btn-primary">+ Link Live Account</button>
+            <button type="button" class="btn-secondary" onclick="App.triggerLiveSync(false)">
+              🔄 Sync Live Accounts Now
+            </button>
+            <button type="button" class="btn-ghost" onclick="App.triggerLiveSync(true)">
+              🧹 Wipe Seed Demo Data &amp; Sync Live Only
+            </button>
+          </div>
+        </form>
+
+        <hr class="modal-divider" />
+
+        <h3 class="modal-section-title">Dual AI Brain Configuration (Google Gemini + Anthropic Claude — Configured ✓)</h3>
+        <form onsubmit="App.saveAIKeys(event)" class="modal-form">
+          <div class="modal-form-grid">
+            <input type="password" id="key-gemini" class="input-clean" placeholder="Google Gemini Key (Configured in .env ✓)" />
+            <input type="password" id="key-claude" class="input-clean" placeholder="Anthropic Claude Key (Configured in .env ✓)" />
+          </div>
+          <button type="submit" class="btn-secondary">Update AI Keys in .env</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
