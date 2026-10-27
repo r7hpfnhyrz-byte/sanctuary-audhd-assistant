@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sanctuary • AuDHD Personal Assistant & Executive Coach</title>
+  <title>Sanctuary</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
@@ -15,181 +15,142 @@
   <canvas id="confetti-canvas" class="confetti-canvas"></canvas>
 
   <div class="app-shell">
-    <!-- Minimalistic Top Bar: Capacity Switcher + Dopamine Progress + Quick-Win Roulette -->
+    <!-- Slim top bar: name + date, brain state, quick win, quiet progress, settings -->
     <header class="topbar">
       <div class="brand-cluster">
         <div class="brand-logo" aria-hidden="true">✦</div>
         <div>
-          <div class="brand-title-row">
-            <h1 class="brand-title">Sanctuary</h1>
-            <span class="cloud-pill" title="24/7 Cloud Sync & Direct File/Task Deep-Links Active">
-              <span class="pulse-dot"></span> Direct Task Links Active
-            </span>
-          </div>
-          <p class="brand-subtitle" id="current-date-label">AuDHD Personal Assistant &amp; Executive Coach</p>
+          <h1 class="brand-title">Sanctuary</h1>
+          <p class="brand-subtitle" id="current-date-label"></p>
         </div>
       </div>
 
       <!-- Energy / Spoon Mode Switcher -->
-      <div class="spoon-switcher" role="group" aria-label="Current Energy and Spoon Capacity">
-        <span class="spoon-label">Brain State:</span>
-        <button class="spoon-btn" data-mode="high" onclick="App.setEnergyMode('high')" title="High bandwidth — protect deep work & tackle the Daily Boss">
-          ⚡ High Focus
+      <div class="spoon-switcher" role="group" aria-label="Brain state">
+        <button class="spoon-btn" data-mode="high" onclick="App.setEnergyMode('high')" title="Plenty of focus: show more items">
+          High focus
         </button>
-        <button class="spoon-btn active" data-mode="steady" onclick="App.setEnergyMode('steady')" title="Balanced pacing — Rule of 3 & transition buffers">
-          🌱 Steady
+        <button class="spoon-btn active" data-mode="steady" onclick="App.setEnergyMode('steady')" title="Normal day: show a balanced amount">
+          Steady
         </button>
-        <button class="spoon-btn" data-mode="low_spoons" onclick="App.setEnergyMode('low_spoons')" title="Overwhelmed or low energy — activates Grace Shield & hides 80% of noise">
-          🔋 Low Spoons
+        <button class="spoon-btn" data-mode="low_spoons" onclick="App.setEnergyMode('low_spoons')" title="Low energy: hide almost everything">
+          Low spoons
         </button>
       </div>
 
-      <!-- Dopamine & XP HUD + Quick-Win Roulette -->
       <div class="hud-cluster">
-        <button class="roulette-btn" onclick="App.spinRoulette()" title="Stuck in task paralysis? Spin for a single 60-second effortless dopamine win">
-          🎲 <span>60s Quick-Win</span>
+        <button class="btn-secondary" onclick="App.spinRoulette()" title="Stuck? Get one tiny 60-second task">
+          🎲 Quick win
         </button>
 
-        <div class="xp-card" onclick="App.switchTab('vault')" title="Click to view your Trophy & Accomplishment Vault">
-          <div class="xp-top-row">
-            <span class="level-badge" id="hud-level">Lv 4 • Dopamine Alchemist</span>
-            <span class="streak-pill" id="hud-streak" title="Momentum Ring (Protected by Grace Shields on Low-Spoons days)">
-              🔥 5d <span id="hud-shield-icon">🛡️</span>
-            </span>
-          </div>
-          <div class="xp-bar-track">
-            <div class="xp-bar-fill" id="hud-xp-fill" style="width: 40%;"></div>
-          </div>
-          <div class="xp-sub-row">
-            <span id="hud-xp-text">340 XP</span>
-            <span id="hud-next-xp">60 XP to Lv 5</span>
-          </div>
-        </div>
+        <!-- Quiet progress: one small line, click for the Wins tab -->
+        <button class="xp-mini" id="hud-xp" onclick="App.switchTab('vault')" title="Your progress">
+          <span id="hud-level">Level 1</span>
+          <span class="xp-bar-track"><span class="xp-bar-fill" id="hud-xp-fill" style="width: 0%;"></span></span>
+        </button>
 
-        <button class="icon-btn" onclick="App.toggleTheme()" title="Switch Calm Light / Cozy Dark Theme" id="theme-toggle-btn">
+        <button class="icon-btn" onclick="App.toggleTheme()" title="Switch light / dark" id="theme-toggle-btn">
           🌙
         </button>
-        <button class="icon-btn" onclick="App.openAccountsModal()" title="Manage Connected Google, Outlook & Notion Accounts">
+        <button class="icon-btn" onclick="App.openAccountsModal()" title="Settings and connected accounts">
           ⚙️
         </button>
       </div>
     </header>
 
-    <!-- Sticky Pinned Active Task Bar (Appears if you open a file without auto-completing so you never hunt for it!) -->
+    <!-- Sticky bar: shows while a task is open in another tab, so marking it done is one click -->
     <div id="pinned-task-bar" class="pinned-task-bar hidden">
       <div class="pinned-task-info">
-        <span class="pinned-badge">🎯 CURRENTLY OPEN IN ANOTHER WINDOW</span>
+        <span class="pinned-badge">Open in another tab</span>
         <strong id="pinned-task-title">Task Title</strong>
-        <span id="pinned-task-target" class="source-tag"></span>
       </div>
       <div class="pinned-task-actions">
-        <button class="btn-primary" id="pinned-complete-btn">✓ Done! Complete &amp; Claim XP</button>
-        <button class="btn-secondary" id="pinned-reopen-btn">↗ Re-Open File/Link</button>
+        <button class="btn-primary" id="pinned-complete-btn">Mark done</button>
+        <button class="btn-secondary" id="pinned-reopen-btn">Open again</button>
         <button class="btn-ghost" onclick="App.clearPinnedTask()">Dismiss</button>
       </div>
     </div>
 
-    <!-- Quick-Win Roulette Modal Drawer -->
+    <!-- Quick-Win Roulette Drawer -->
     <div id="roulette-banner" class="roulette-banner hidden">
       <div class="roulette-content">
-        <div class="roulette-tag">🎰 PARALYSIS BREAKER • 1-CLICK LAUNCH &amp; AUTO-COMPLETE</div>
+        <div class="roulette-tag">Quick win</div>
         <h3 id="roulette-headline">Loading quick win...</h3>
         <p id="roulette-action"></p>
       </div>
       <div class="roulette-actions">
-        <button class="btn-primary" id="roulette-do-btn">🚀 Launch &amp; Auto-Complete (+XP)</button>
-        <button class="btn-ghost" onclick="App.spinRoulette()">Spin Another 🎲</button>
+        <button class="btn-primary" id="roulette-do-btn">Do it</button>
+        <button class="btn-ghost" onclick="App.spinRoulette()">Try another</button>
         <button class="btn-ghost" onclick="App.closeRoulette()">Close</button>
       </div>
     </div>
 
-    <!-- Main Navigation Pills (Minimalistic 5-Pillar Architecture) -->
-    <nav class="main-nav" aria-label="Workspace Sections">
+    <!-- Main Navigation -->
+    <nav class="main-nav" aria-label="Sections">
       <button class="nav-tab active" data-tab="briefing" onclick="App.switchTab('briefing')">
-        🌅 Daily Briefing &amp; Horizons
+        Today
       </button>
       <button class="nav-tab" data-tab="inbox" onclick="App.switchTab('inbox')">
-        ✉️ Triage &amp; Draft Studio <span class="nav-count" id="nav-email-count">4</span>
+        Inbox <span class="nav-count" id="nav-email-count">0</span>
       </button>
       <button class="nav-tab" data-tab="sandbox" onclick="App.switchTab('sandbox')">
-        💡 Shiny Object Sandbox <span class="nav-badge-xp">+25 XP</span>
+        Ideas
       </button>
       <button class="nav-tab" data-tab="coach" onclick="App.switchTab('coach')">
-        🧠 AuDHD Coach &amp; Focus Timer
+        Coach
       </button>
       <button class="nav-tab" data-tab="vault" onclick="App.switchTab('vault')">
-        🏆 Accomplishment Vault <span class="nav-count" id="nav-vault-count">7</span>
+        Wins <span class="nav-count" id="nav-vault-count">0</span>
       </button>
     </nav>
 
     <!-- =====================================================================
-         VIEW 1: DAILY BRIEFING & 4-HORIZON PROACTIVE RADAR (1d, 2d, 1w, 1m)
+         VIEW 1: TODAY (next thing, then tasks, then calendar)
          ===================================================================== -->
     <main id="tab-briefing" class="tab-view active">
-      <!-- Coach's Calm Morning Synthesis Banner -->
-      <section class="coach-briefing-hero">
-        <div class="coach-hero-left">
-          <div class="coach-eyebrow">ZERO-FRICTION EXECUTION • CLICK ANY ITEM TO OPEN &amp; AUTO-COMPLETE</div>
-          <p class="coach-headline-text" id="briefing-headline">Scanning your calendars, inboxes, and Notion workspaces...</p>
-          <div class="account-pills-row" id="connected-accounts-strip"></div>
-        </div>
-        <div class="sensory-weather-card">
-          <div class="weather-title">Sensory &amp; Social Battery Radar</div>
-          <div class="weather-meters">
-            <div class="meter-row">
-              <span>Social Masking Load</span>
-              <span id="weather-social-val" class="meter-val">7.0 / 10</span>
-            </div>
-            <div class="meter-bar"><div id="weather-social-fill" class="meter-fill social" style="width:70%"></div></div>
-            <div class="meter-row">
-              <span>Cognitive Switch Load</span>
-              <span id="weather-cog-val" class="meter-val">7.5 / 10</span>
-            </div>
-            <div class="meter-bar"><div id="weather-cog-fill" class="meter-fill cog" style="width:75%"></div></div>
-          </div>
-          <p class="weather-tip" id="weather-status-label">Moderate load — transition buffers added</p>
-        </div>
-      </section>
+      <!-- Sensory & social battery: one slim line -->
+      <div class="battery-strip" title="Based on today's calendar">
+        <span class="battery-item">
+          <span class="battery-label">Social load</span>
+          <span class="meter-bar"><span id="weather-social-fill" class="meter-fill social" style="width:0%"></span></span>
+          <span id="weather-social-val" class="meter-val"></span>
+        </span>
+        <span class="battery-item">
+          <span class="battery-label">Switching load</span>
+          <span class="meter-bar"><span id="weather-cog-fill" class="meter-fill cog" style="width:0%"></span></span>
+          <span id="weather-cog-val" class="meter-val"></span>
+        </span>
+        <span class="battery-note" id="weather-status-label"></span>
+      </div>
 
-      <!-- Daily Boss Battle Card (Turns the #1 dreaded task into a 3x XP reward) -->
-      <section id="daily-boss-container" class="daily-boss-section"></section>
+      <!-- The one most important task -->
+      <section id="daily-boss-container"></section>
 
-      <!-- 4-Horizon Selector (Progressive Disclosure: only see 1 time horizon at a time!) -->
+      <!-- Everything else, one time window at a time -->
       <section class="horizon-section">
         <div class="section-header-bar">
-          <div>
-            <h2 class="section-title">Proactive Horizon Radar</h2>
-            <p class="section-subtitle">Every item links directly to the actual file, calendar event, or email draft—and can auto-complete on launch so you never have to come back to tick a box.</p>
-          </div>
+          <h2 class="section-title">Coming up</h2>
           <div class="horizon-pills" role="tablist">
             <button class="horizon-pill active" data-horizon="1d" onclick="App.selectHorizon('1d')">
-              Today (24h) <span class="pill-count" id="h-count-1d">0</span>
+              Today <span class="pill-count" id="h-count-1d">0</span>
             </button>
             <button class="horizon-pill" data-horizon="2d" onclick="App.selectHorizon('2d')">
-              Tomorrow &amp; 48h <span class="pill-count" id="h-count-2d">0</span>
+              Tomorrow <span class="pill-count" id="h-count-2d">0</span>
             </button>
             <button class="horizon-pill" data-horizon="1w" onclick="App.selectHorizon('1w')">
-              Next 7 Days <span class="pill-count" id="h-count-1w">0</span>
+              This week <span class="pill-count" id="h-count-1w">0</span>
             </button>
             <button class="horizon-pill" data-horizon="1m" onclick="App.selectHorizon('1m')">
-              Next 30 Days <span class="pill-count" id="h-count-1m">0</span>
+              This month <span class="pill-count" id="h-count-1m">0</span>
             </button>
           </div>
         </div>
 
-        <div class="horizon-grid">
-          <!-- Left: Proactive Preparation Suggestions for Selected Horizon -->
-          <div class="horizon-column">
-            <h3 class="column-heading" id="horizon-prep-heading">Proactive Prep &amp; 1-Click Launch</h3>
-            <div id="horizon-suggestions-list" class="card-stack"></div>
-          </div>
+        <h3 class="column-heading">Tasks</h3>
+        <div id="horizon-suggestions-list" class="card-stack"></div>
 
-          <!-- Right: Unified Calendar Timeline & Transition Buffers -->
-          <div class="horizon-column">
-            <h3 class="column-heading" id="horizon-cal-heading">Schedule &amp; Linked Meeting Docs</h3>
-            <div id="horizon-events-list" class="card-stack"></div>
-          </div>
-        </div>
+        <h3 class="column-heading column-heading-spaced">Calendar</h3>
+        <div id="horizon-events-list" class="card-stack"></div>
       </section>
     </main>
 
