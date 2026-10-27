@@ -256,7 +256,7 @@ class BriefingHorizonEngine:
 
         updated_progress = self.game.award_xp(
             amount=xp,
-            reason=f"{'⚔️ DAILY BOSS DEFEATED: ' if is_boss else 'Cleared: '}{item['title']}",
+            reason=f"{'Next thing done: ' if is_boss else 'Cleared: '}{item['title']}",
             is_boss=is_boss,
         )
         return {

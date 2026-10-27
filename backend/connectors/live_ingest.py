@@ -691,7 +691,7 @@ class LiveIngestionEngine:
                                 horizon,
                                 display_title,
                                 f"Live item from {label} ({due_ctx} • Last edited {item['last_edited'][:10]}).",
-                                f"Click '🚀 Open in Notion & Auto-Complete' to jump straight to '{item['title']}' in Notion and claim +{xp} XP.",
+                                f"Open '{item['title']}' in Notion and do one small thing, like updating its status.",
                                 json.dumps(["Open directly in Notion", "Complete 1 micro-step or update status"]),
                                 label,
                                 is_boss,

@@ -165,8 +165,7 @@ const App = {
     this.state.pinnedTask = item;
     const bar = document.getElementById('pinned-task-bar');
     bar.classList.remove('hidden');
-    document.getElementById('pinned-task-title').textContent = item.title;
-    document.getElementById('pinned-task-target').textContent = `(${item.target_label || 'Opened'})`;
+    document.getElementById('pinned-task-title').textContent = this.splitTitle(item.title).title;
 
     document.getElementById('pinned-complete-btn').onclick = async () => {
       await this.completeSuggestion(item.id, isBoss);
@@ -188,12 +187,12 @@ const App = {
      ------------------------------------------------------------------------ */
   updateHUD(progress) {
     if (!progress) return;
-    document.getElementById('hud-level').textContent = `Lv ${progress.level} • ${progress.level_title}`;
-    const shieldIcon = progress.grace_shield_active_today ? '🛡️ Grace Shield Active' : '🛡️';
-    document.getElementById('hud-streak').innerHTML = `🔥 ${progress.momentum_days}d ${shieldIcon}`;
+    document.getElementById('hud-level').textContent = `Level ${progress.level}`;
     document.getElementById('hud-xp-fill').style.width = `${progress.xp_in_current_level}%`;
-    document.getElementById('hud-xp-text').textContent = `${progress.xp} XP`;
-    document.getElementById('hud-next-xp').textContent = `${progress.xp_to_next_level} XP to Lv ${progress.level + 1}`;
+    const shieldText = progress.grace_shield_active_today ? ' • Grace Shield on' : '';
+    document.getElementById('hud-xp').title =
+      `${progress.level_title} • ${progress.xp} XP • ${progress.xp_to_next_level} XP to level ${progress.level + 1} • ` +
+      `${progress.momentum_days}-day streak${shieldText}`;
 
     document.querySelectorAll('.spoon-btn').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.mode === progress.energy_mode);
@@ -209,8 +208,12 @@ const App = {
     if (progress.last_reward) {
       const r = progress.last_reward;
       const sparkText = r.mystery_spark_bonus ? ` (+${r.mystery_spark_bonus} Mystery Spark Bonus!)` : '';
-      const lvlText = r.leveled_up ? ` 🎉 LEVEL UP TO LV ${r.new_level}!` : '';
-      this.showToast(`✨ +${r.xp_gained} XP${sparkText} — ${this.escape(r.reason)}${lvlText}`);
+      const lvlText = r.leveled_up ? ` 🎉 Level ${r.new_level}!` : '';
+      const reason = String(r.reason || '').replace(
+        /^(Cleared: |Next thing done: )(.*)$/,
+        (_, prefix, title) => prefix + this.splitTitle(title).title
+      );
+      this.showToast(`✨ +${r.xp_gained} XP${sparkText} · ${this.escape(reason)}${lvlText}`);
     }
   },
 
@@ -296,88 +299,148 @@ const App = {
     const b = this.state.briefing;
     if (!b) return;
 
-    document.getElementById('current-date-label').textContent = `${b.generated_at} • Multi-Account AuDHD Coach`;
-    document.getElementById('briefing-headline').innerHTML = this.formatBold(b.coach_headline);
+    document.getElementById('current-date-label').textContent = b.generated_at;
 
-    // Clickable Connected Account Chips
-    const accStrip = document.getElementById('connected-accounts-strip');
-    accStrip.innerHTML = (b.connected_accounts || [])
-      .map(
-        (a) => `
-        <span class="account-chip clickable" onclick="App.openDirectTarget('', '${this.escapeAttr(a.portal_url || 'https://www.notion.so')}', '${this.escapeAttr(a.account_label)}')" title="Click to open ${this.escape(a.account_label)}">
-          <span class="account-dot" style="background:${a.color_tag}"></span>
-          ${this.escape(a.account_label)} ↗
-        </span>`
-      )
-      .join('');
-
-    // Sensory weather
+    // Sensory & social battery
     const sw = b.sensory_weather || {};
-    document.getElementById('weather-social-val').textContent = `${sw.social_load_score} / 10`;
+    document.getElementById('weather-social-val').textContent = `${sw.social_load_score}`;
     document.getElementById('weather-social-fill').style.width = `${Math.min(100, sw.social_load_score * 10)}%`;
-    document.getElementById('weather-cog-val').textContent = `${sw.cognitive_load_score} / 10`;
+    document.getElementById('weather-cog-val').textContent = `${sw.cognitive_load_score}`;
     document.getElementById('weather-cog-fill').style.width = `${Math.min(100, sw.cognitive_load_score * 10)}%`;
     document.getElementById('weather-status-label').textContent = sw.status_label || '';
 
-    // Daily Boss Card with 1-Click File Launch & Auto-Complete
+    // "Your next thing": the single most important task
     const bossContainer = document.getElementById('daily-boss-container');
     if (b.daily_boss) {
       const boss = b.daily_boss;
-      const stepsHtml = (boss.micro_steps || [])
-        .map((s) => `<li>${this.escape(s)}</li>`)
-        .join('');
-      const actionLabel = boss.inline_action_label || `🚀 Open Target & Auto-Complete (+${boss.xp_reward} XP)`;
+      const t = this.splitTitle(boss.title);
       bossContainer.innerHTML = `
-        <div class="daily-boss-card">
-          <div style="flex:1; min-width:280px;">
-            <div class="boss-badge">⚔️ TODAY'S DAILY BOSS • 3× DOPAMINE BONUS (+${boss.xp_reward} XP)</div>
-            <div>
-              <button class="target-link-pill" onclick="App.launchAndCompleteSuggestion(${boss.id}, true, false)" title="Opens the actual file and pins a 1-click Done bar at the top">
-                🔗 ${this.escape(boss.target_label || 'Open Linked File')} ↗
-              </button>
-            </div>
-            <h3 class="boss-title clickable-title" onclick="App.launchAndCompleteSuggestion(${boss.id}, true, true)" title="Click to open file & auto-complete!">
-              ${this.escape(boss.title)} ↗
-            </h3>
-            <p class="boss-why">${this.escape(boss.why_it_matters)}</p>
-            <div class="starter-step-box">
-              <strong>90-Second Friction-Free Starter:</strong> ${this.escape(boss.starter_micro_step)}
-            </div>
-            ${stepsHtml ? `<ol class="micro-steps-list">${stepsHtml}</ol>` : ''}
+        <article class="next-card ${t.isDeadline ? 'is-deadline' : ''}">
+          <div class="next-eyebrow">Your next thing</div>
+          <h3 class="next-title clickable-title" onclick="App.launchAndCompleteSuggestion(${boss.id}, true, false)" title="Open it">
+            ${this.escape(t.title)}
+          </h3>
+          ${this.renderTaskMeta(boss, t)}
+          ${this.starterStep(boss) ? `<p class="next-start"><strong>Start with:</strong> ${this.escape(this.starterStep(boss))}</p>` : ''}
+          <div class="card-actions-row">
+            <button class="btn-secondary" onclick="App.launchAndCompleteSuggestion(${boss.id}, true, false)">Open</button>
+            <button class="btn-primary" onclick="App.completeSuggestion(${boss.id}, true)">Done</button>
           </div>
-          <div class="card-actions-row" style="align-self:center; flex-direction:column; align-items:stretch;">
-            <button class="btn-primary" onclick="App.launchAndCompleteSuggestion(${boss.id}, true, true)">
-              ${this.escape(actionLabel)}
-            </button>
-            <button class="btn-secondary" onclick="App.launchAndCompleteSuggestion(${boss.id}, true, false)">
-              ↗ Open File &amp; Pin Floating 'Done' Bar
-            </button>
-            <button class="btn-ghost" onclick="App.breakSuggestionSteps(${boss.id})">
-              ✨ Shrink Into Smaller Micro-Steps
-            </button>
-          </div>
-        </div>
+          ${this.renderTaskMore(boss, true)}
+        </article>
       `;
     } else {
       bossContainer.innerHTML = `
-        <div class="daily-boss-card">
-          <div>
-            <div class="boss-badge" style="background:var(--accent-primary);">🏆 DAILY BOSS DEFEATED!</div>
-            <h3 class="boss-title">You already conquered today's biggest mental open loop!</h3>
-            <p class="boss-why">Everything else today is bonus momentum. Check your Accomplishment Vault whenever you want a reminder of your progress.</p>
-          </div>
-        </div>
+        <article class="next-card">
+          <div class="next-eyebrow">Your next thing</div>
+          <h3 class="next-title">Done for today. Anything below is a bonus.</h3>
+        </article>
       `;
     }
 
-    // Horizon counts
+    // Horizon counts (the next thing is shown above, so it isn't counted twice)
     ['1d', '2d', '1w', '1m'].forEach((h) => {
-      const count = ((b.horizons && b.horizons[h]) || []).length;
+      const count = this.horizonSuggestions(h).length;
       const el = document.getElementById(`h-count-${h}`);
       if (el) el.textContent = count;
     });
 
     this.renderSelectedHorizon();
+  },
+
+  horizonSuggestions(h) {
+    const b = this.state.briefing;
+    const bossId = b.daily_boss ? b.daily_boss.id : null;
+    return ((b.horizons && b.horizons[h]) || []).filter((s) => s.id !== bossId);
+  },
+
+  // Live Notion titles arrive as "⏰ [Category • Hard Deadline • Priority: High] Title"
+  // or "Notion: Title". Pull the tags out so the title reads cleanly.
+  splitTitle(raw) {
+    let title = String(raw || '').trim();
+    let isDeadline = title.startsWith('⏰');
+    title = title.replace(/^⏰\s*/, '').replace(/^⚔️?\s*/, '');
+    let tags = [];
+    const m = title.match(/^\[([^\]]+)\]\s*(.*)$/);
+    if (m) {
+      tags = m[1].split('•').map((x) => x.trim()).filter(Boolean);
+      title = m[2];
+    }
+    title = title.replace(/^Notion:\s*/, '');
+    if (tags.includes('Hard Deadline')) isDeadline = true;
+    tags = tags.filter((x) => x !== 'Hard Deadline');
+    return { title, tags, isDeadline };
+  },
+
+  renderTaskMeta(s, t) {
+    const bits = [];
+    if (s.due_context) bits.push(this.escape(this.formatDue(s.due_context)));
+    t.tags.forEach((tag) => bits.push(this.escape(tag)));
+    if (s.source_label) bits.push(this.escape(s.source_label));
+    return `
+      <div class="card-meta">
+        ${t.isDeadline ? '<span class="deadline-label">Deadline</span>' : ''}
+        ${bits.join(' · ')}
+      </div>`;
+  },
+
+  // Older synced items have starter tips that describe buttons which no longer exist
+  starterStep(s) {
+    const step = s.starter_micro_step || '';
+    return /Auto-Complete/i.test(step) ? '' : step;
+  },
+
+  // Extra detail tucked behind a "More" toggle so cards stay short
+  renderTaskMore(s, isBoss) {
+    const steps = (s.micro_steps || []).map((st) => `<li>${this.escape(st)}</li>`).join('');
+    // Only special actions (e.g. booking a calendar buffer) keep their own label
+    const special = ['calendar_buffer', 'inline_reschedule'].includes(s.inline_action_type);
+    const oneGoLabel = special && s.inline_action_label
+      ? s.inline_action_label.replace(/^\W+/, '').replace(/\s*\(\+\d+ XP\)\s*$/, '')
+      : 'Open and mark done in one go';
+    const starter = this.starterStep(s);
+    return `
+      <details class="card-more" data-more-id="${s.id}">
+        <summary>More</summary>
+        ${s.why_it_matters ? `<p>${this.escape(s.why_it_matters)}</p>` : ''}
+        ${!isBoss && starter ? `<p><strong>Start with:</strong> ${this.escape(starter)}</p>` : ''}
+        ${steps ? `<ol class="micro-steps-list">${steps}</ol>` : ''}
+        <div class="card-actions-row">
+          <button class="btn-ghost" onclick="App.launchAndCompleteSuggestion(${s.id}, ${isBoss}, true)">${this.escape(oneGoLabel)}</button>
+          <button class="btn-ghost" onclick="App.breakSuggestionSteps(${s.id})">Break into smaller steps</button>
+        </div>
+      </details>`;
+  },
+
+  // "2026-10-28" -> "Due tomorrow" / "Due Fri 30 Oct" / "Overdue (Mon 12 Jan)". Other text passes through.
+  formatDue(ctx) {
+    const m = String(ctx).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return ctx;
+    const due = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const days = Math.round((due - today) / 86400000);
+    const opts = { weekday: 'short', day: 'numeric', month: 'short' };
+    if (due.getFullYear() !== today.getFullYear()) opts.year = 'numeric';
+    const label = due.toLocaleDateString('en-GB', opts);
+    if (days < 0) return `Overdue (${label})`;
+    if (days === 0) return 'Due today';
+    if (days === 1) return 'Due tomorrow';
+    return `Due ${label}`;
+  },
+
+  formatTimeRange(start, end) {
+    const parse = (v) => {
+      const d = new Date(String(v || '').replace(' ', 'T'));
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+    const s = parse(start);
+    if (!s) return this.escape(start);
+    const day = s.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+    if (String(start).length <= 10) return day;
+    const time = (d) => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    const e = parse(end);
+    return e ? `${day}, ${time(s)} to ${time(e)}` : `${day}, ${time(s)}`;
   },
 
   selectHorizon(horizon) {
@@ -392,63 +455,33 @@ const App = {
     const b = this.state.briefing;
     if (!b) return;
     const h = this.state.selectedHorizon;
-    const labels = {
-      '1d': 'Today (Next 24 Hours)',
-      '2d': 'Tomorrow & 48-Hour Lookahead',
-      '1w': 'Next 7 Days Capacity & Bottleneck Radar',
-      '1m': 'Next 30 Days Long-Range Radar',
-    };
-    document.getElementById('horizon-prep-heading').textContent = `Proactive Prep & Direct Launch • ${labels[h]}`;
-    document.getElementById('horizon-cal-heading').textContent = `Schedule & Linked Docs • ${labels[h]}`;
 
-    const suggestions = (b.horizons && b.horizons[h]) || [];
+    const suggestions = this.horizonSuggestions(h);
     const suggList = document.getElementById('horizon-suggestions-list');
     if (suggestions.length === 0) {
       suggList.innerHTML = `
-        <div class="clean-card">
-          <p class="card-desc" style="margin:0;">
-            ✨ All clear for this horizon! ${
-              b.energy_mode === 'low_spoons' && h === '1m'
-                ? '30-day items are gently hidden while you are in Low Spoons Mode.'
-                : 'Future-You is completely caught up here.'
-            }
-          </p>
-        </div>`;
+        <p class="empty-note">${
+          b.energy_mode === 'low_spoons' && h === '1m'
+            ? 'Hidden while you are on Low spoons.'
+            : 'Nothing here. You are clear.'
+        }</p>`;
     } else {
       suggList.innerHTML = suggestions
         .map((s) => {
-          const steps = (s.micro_steps || []).map((st) => `<li>${this.escape(st)}</li>`).join('');
-          const actionLabel = s.inline_action_label || `🚀 Launch & Auto-Complete (+${s.xp_reward} XP)`;
+          const t = this.splitTitle(s.title);
           return `
-            <article class="clean-card">
-              <div class="card-meta-row">
-                <span class="source-tag">${this.escape(s.source_label)} • ${this.escape(s.due_context)}</span>
-                <span class="xp-tag">+${s.xp_reward} XP</span>
+            <article class="task-card ${t.isDeadline ? 'is-deadline' : ''}">
+              <div class="task-main">
+                <h4 class="card-title clickable-title" onclick="App.launchAndCompleteSuggestion(${s.id}, false, false)" title="Open it">
+                  ${this.escape(t.title)}
+                </h4>
+                ${this.renderTaskMeta(s, t)}
               </div>
-              <div>
-                <button class="target-link-pill" onclick="App.launchAndCompleteSuggestion(${s.id}, ${Boolean(s.is_daily_boss)}, false)" title="Opens the linked file/target and pins a floating Done bar">
-                  🔗 ${this.escape(s.target_label || 'Open Linked Target')} ↗
-                </button>
+              <div class="task-actions">
+                <button class="btn-secondary btn-sm" onclick="App.launchAndCompleteSuggestion(${s.id}, false, false)">Open</button>
+                <button class="btn-primary btn-sm" onclick="App.completeSuggestion(${s.id}, false)">Done</button>
               </div>
-              <h4 class="card-title clickable-title" onclick="App.launchAndCompleteSuggestion(${s.id}, ${Boolean(s.is_daily_boss)}, true)" title="Click to launch target & auto-complete in 1 move">
-                ${s.is_daily_boss ? '⚔️ ' : ''}${this.escape(s.title)} ↗
-              </h4>
-              <p class="card-desc">${this.escape(s.why_it_matters)}</p>
-              <div class="micro-starter-callout">
-                <strong>Zero-Friction Move:</strong> ${this.escape(s.starter_micro_step)}
-              </div>
-              ${steps ? `<ol class="micro-steps-list">${steps}</ol>` : ''}
-              <div class="card-actions-row">
-                <button class="btn-primary" onclick="App.launchAndCompleteSuggestion(${s.id}, ${Boolean(s.is_daily_boss)}, true)">
-                  ${this.escape(actionLabel)}
-                </button>
-                <button class="btn-secondary" onclick="App.launchAndCompleteSuggestion(${s.id}, ${Boolean(s.is_daily_boss)}, false)">
-                  ↗ Open Target &amp; Pin 'Done' Bar
-                </button>
-                <button class="btn-ghost" onclick="App.breakSuggestionSteps(${s.id})">
-                  🔨 Shrink Steps
-                </button>
-              </div>
+              ${this.renderTaskMore(s, false)}
             </article>
           `;
         })
@@ -458,38 +491,33 @@ const App = {
     const events = (b.events_by_horizon && b.events_by_horizon[h]) || [];
     const evList = document.getElementById('horizon-events-list');
     if (events.length === 0) {
-      evList.innerHTML = `<div class="clean-card"><p class="card-desc" style="margin:0;">No calendar events in this window.</p></div>`;
+      evList.innerHTML = `<p class="empty-note">No calendar events.</p>`;
     } else {
       evList.innerHTML = events
-        .map(
-          (ev) => `
-          <article class="clean-card">
-            <div class="card-meta-row">
-              <span class="source-tag">${this.escape(ev.account_label)} • ${this.escape(ev.location)}</span>
-              <span class="xp-tag">Social ${ev.social_load}/10 • Cog ${ev.cognitive_load}/10</span>
+        .map((ev) => {
+          const metaBits = [this.formatTimeRange(ev.start_time, ev.end_time), this.escape(ev.account_label)];
+          if (ev.location) metaBits.push(this.escape(ev.location));
+          return `
+          <article class="task-card event-card">
+            <div class="task-main">
+              <h4 class="card-title clickable-title" onclick="App.openDirectTarget('${this.escapeAttr(ev.local_file_path)}', '${this.escapeAttr(ev.target_url)}', '${this.escapeAttr(ev.title)}')" title="Open it">
+                ${this.escape(ev.title)}
+              </h4>
+              <div class="card-meta">${metaBits.join(' · ')}</div>
             </div>
-            <div>
-              <button class="target-link-pill" onclick="App.openDirectTarget('${this.escapeAttr(ev.local_file_path)}', '${this.escapeAttr(ev.target_url)}', '${this.escapeAttr(ev.target_label)}')">
-                ${this.escape(ev.target_label || '📅 Open Event & Prep Doc')} ↗
-              </button>
+            <div class="task-actions">
+              <button class="btn-secondary btn-sm" onclick="App.openDirectTarget('${this.escapeAttr(ev.local_file_path)}', '${this.escapeAttr(ev.target_url)}', '${this.escapeAttr(ev.target_label)}')">Open</button>
             </div>
-            <h4 class="card-title clickable-title" onclick="App.openDirectTarget('${this.escapeAttr(ev.local_file_path)}', '${this.escapeAttr(ev.target_url)}', '${this.escapeAttr(ev.title)}')">
-              ${this.escape(ev.title)} ↗
-            </h4>
-            <p class="card-desc">🕒 ${this.escape(ev.start_time)} → ${this.escape(ev.end_time)}</p>
-            <div class="micro-starter-callout">
-              <strong>🛡️ Transition Buffer (${ev.transition_buffer_mins}m):</strong> ${this.escape(ev.prep_needed)}
-            </div>
-            <div class="card-actions-row">
-              <button class="btn-secondary" onclick="App.openDirectTarget('${this.escapeAttr(ev.local_file_path)}', '${this.escapeAttr(ev.target_url)}', '${this.escapeAttr(ev.target_label)}')">
-                📂 Open Meeting Doc / Join Link
-              </button>
-              <button class="btn-ghost" onclick="App.openDirectTarget('', '${this.escapeAttr(ev.target_url)}', 'Calendar')">
-                📅 Open in Calendar ↗
-              </button>
-            </div>
-          </article>`
-        )
+            <details class="card-more">
+              <summary>More</summary>
+              ${ev.prep_needed ? `<p><strong>Before it (${ev.transition_buffer_mins} min):</strong> ${this.escape(ev.prep_needed)}</p>` : ''}
+              <p>Social load ${ev.social_load}/10 · Switching load ${ev.cognitive_load}/10</p>
+              <div class="card-actions-row">
+                <button class="btn-ghost" onclick="App.openDirectTarget('', '${this.escapeAttr(ev.target_url)}', 'Calendar')">Open in calendar</button>
+              </div>
+            </details>
+          </article>`;
+        })
         .join('');
     }
   },
@@ -510,6 +538,9 @@ const App = {
     const res = await this.api('/api/suggestions/micro-steps', 'POST', { id });
     if (res.ok) {
       await this.loadBriefing();
+      // Re-rendering closes the "More" panel, so reopen it to show the new steps
+      const more = document.querySelector(`[data-more-id="${id}"]`);
+      if (more) more.open = true;
       this.showToast('✨ Micro-steps updated!');
     }
   },
