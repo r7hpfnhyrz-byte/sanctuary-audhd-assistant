@@ -1002,6 +1002,9 @@ const App = {
       this.showToast(
         `✓ Live Sync Complete: ${res.events_synced} events, ${res.emails_triaged} emails triaged, ${res.notion_items_synced} Notion items!`
       );
+      if (res.notion_items_synced === 0 && res.notion_debug) {
+        this.showToast(`⚠️ Notion: ${this.escape(res.notion_debug)}`);
+      }
       await this.loadBriefing();
       await this.loadEmails();
     }
