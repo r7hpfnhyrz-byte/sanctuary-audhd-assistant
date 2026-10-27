@@ -94,6 +94,9 @@ class LiveIngestionEngine:
                     "due_date": meta.get("due_date", ""),
                     "horizon": meta.get("horizon", "1d"),
                     "account_label": account_label,
+                    "type_label": meta.get("type_label", ""),
+                    "category_label": meta.get("category_label", ""),
+                    "priority_label": meta.get("priority_label", ""),
                 }
             )
 
@@ -108,6 +111,10 @@ class LiveIngestionEngine:
                 )
                 items.extend(todo_items)
 
+        # Soonest-due items first (so the Daily Boss & horizon order reflect real urgency,
+        # not just whatever Notion's last-edited search order happened to surface).
+        # Items without a due date keep their relative discovery order, sunk to the back.
+        items.sort(key=lambda it: (0, it["due_date"]) if it.get("due_date") else (1, ""))
         return items
 
     def _fetch_unchecked_todos_from_page(
@@ -164,45 +171,80 @@ class LiveIngestionEngine:
 
     @staticmethod
     def _extract_notion_properties_meta(obj: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract Status, Checkbox, and Date properties from Notion database rows to assign accurate 1d/2d/1w/1m horizons."""
+        """Extract Status, Type/Category/Priority, and due-date properties from Notion database rows
+        to assign accurate 1d/2d/1w/1m horizons.
+
+        Databases with more than one select property (e.g. Category + Type + Priority + Status) or
+        more than one date property (e.g. Start Date + End Date) need to be matched by property NAME,
+        not just by type, otherwise whichever property happens to be last in the API response silently
+        overwrites the real Status/due date.
+        """
         props = obj.get("properties", {})
-        status_str = ""
-        due_str = ""
-        is_done = False
-        horizon = ""
         now = datetime.now()
 
-        for _, pval in props.items():
+        select_props: Dict[str, str] = {}
+        date_props: Dict[str, str] = {}
+        is_done = False
+
+        for prop_name, pval in props.items():
             ptype = pval.get("type")
+            name_lower = prop_name.strip().lower()
             if ptype in ("status", "select") and pval.get(ptype):
-                name = (pval[ptype].get("name") or "").strip()
-                status_str = name
-                if name.lower() in ("done", "completed", "complete", "archived", "cancelled"):
-                    is_done = True
+                opt_name = (pval[ptype].get("name") or "").strip()
+                if opt_name:
+                    select_props[name_lower] = opt_name
+                    if opt_name.lower() in ("done", "completed", "complete", "archived", "cancelled"):
+                        is_done = True
             elif ptype == "checkbox":
                 if pval.get("checkbox") is True:
                     is_done = True
             elif ptype == "date" and pval.get("date") and pval["date"].get("start"):
-                due_str = pval["date"]["start"][:10]
-                try:
-                    due_dt = datetime.strptime(due_str, "%Y-%m-%d")
-                    days = (due_dt - now).days
-                    if days <= 1:
-                        horizon = "1d"
-                    elif days <= 3:
-                        horizon = "2d"
-                    elif days <= 8:
-                        horizon = "1w"
-                    else:
-                        horizon = "1m"
-                except Exception:
-                    pass
+                date_props[name_lower] = pval["date"]["start"][:10]
+
+        def _pick(options: Dict[str, str], preferred_names: List[str]) -> str:
+            for pname in preferred_names:
+                if pname in options:
+                    return options[pname]
+            return next(iter(options.values()), "")
+
+        status_str = _pick(select_props, ["status"])
+        type_label = _pick(select_props, ["type"])
+        category_label = _pick(select_props, ["category"])
+        priority_label = _pick(select_props, ["priority"])
+
+        due_str = ""
+        for pname in ("due date", "deadline", "end date", "due"):
+            if pname in date_props:
+                due_str = date_props[pname]
+                break
+        if not due_str:
+            non_start_dates = {k: v for k, v in date_props.items() if "start" not in k}
+            due_str = next(iter(non_start_dates.values()), "") or next(iter(date_props.values()), "")
+
+        horizon = ""
+        if due_str:
+            try:
+                due_dt = datetime.strptime(due_str, "%Y-%m-%d")
+                days = (due_dt - now).days
+                if days <= 1:
+                    horizon = "1d"
+                elif days <= 3:
+                    horizon = "2d"
+                elif days <= 8:
+                    horizon = "1w"
+                else:
+                    horizon = "1m"
+            except Exception:
+                pass
 
         return {
             "status": status_str,
             "due_date": due_str,
             "is_done": is_done,
             "horizon": horizon,
+            "type_label": type_label,
+            "category_label": category_label,
+            "priority_label": priority_label,
         }
 
     # -------------------------------------------------------------------------
@@ -554,10 +596,26 @@ class LiveIngestionEngine:
                         existing_urls.add(item_url)
                         horizon = item.get("horizon") or ("1d" if idx < 4 else ("2d" if idx < 10 else ("1w" if idx < 22 else "1m")))
                         due_ctx = item.get("due_date") or item.get("status_label") or "Live Notion Environment"
+
+                        type_label = item.get("type_label", "")
+                        category_label = item.get("category_label", "")
+                        priority_label = item.get("priority_label", "")
+                        is_hard_deadline = type_label == "Hard Deadline"
+
+                        tag_bits = [
+                            b for b in (category_label, type_label, f"Priority: {priority_label}" if priority_label else "")
+                            if b
+                        ]
+                        display_title = (
+                            f"{'⏰ ' if is_hard_deadline else ''}[{' • '.join(tag_bits)}] {item['title']}"
+                            if tag_bits
+                            else f"Notion: {item['title']}"
+                        )
+
                         is_boss = 1 if (not has_active_boss and idx == 0 and notion_suggestions_added == 0) else 0
                         if is_boss:
                             has_active_boss = True
-                        xp = 75 if is_boss else 30
+                        xp = 75 if is_boss else (50 if is_hard_deadline else 30)
                         conn.execute(
                             """
                             INSERT INTO proactive_suggestions (
@@ -569,7 +627,7 @@ class LiveIngestionEngine:
                             """,
                             (
                                 horizon,
-                                f"Notion: {item['title']}",
+                                display_title,
                                 f"Live item from {label} ({due_ctx} • Last edited {item['last_edited'][:10]}).",
                                 f"Click '🚀 Open in Notion & Auto-Complete' to jump straight to '{item['title']}' in Notion and claim +{xp} XP.",
                                 json.dumps(["Open directly in Notion", "Complete 1 micro-step or update status"]),
