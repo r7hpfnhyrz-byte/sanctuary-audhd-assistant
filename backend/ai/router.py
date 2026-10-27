@@ -231,7 +231,7 @@ class DualAIRouter:
             f"60-Second Starter: Just open the file/window for '{task_title}' and take one breath (don't even try to finish it).",
             "Brain-Dump Step: Write 2 ugly, imperfect bullet points—ban yourself from editing or formatting.",
             "Core Action: Spend 5 minutes on the single most obvious piece with the Focus Timer running.",
-            "Victory Lap: Save, close the tab, and click 'Clear & Claim XP' to bank your dopamine win!",
+            "Finish: Save, close the tab, and click Done.",
         ]
 
     def shift_email_tone(self, current_draft: str, target_tone: str, sender_name: str, subject: str) -> str:

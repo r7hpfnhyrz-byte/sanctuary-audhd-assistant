@@ -186,6 +186,10 @@ class Database:
             self._ensure_column(conn, "proactive_suggestions", "target_label", "TEXT DEFAULT 'Open Linked Task'")
             self._ensure_column(conn, "proactive_suggestions", "inline_action_type", "TEXT DEFAULT 'open_and_complete'")
             self._ensure_column(conn, "proactive_suggestions", "inline_action_label", "TEXT DEFAULT '🚀 Open & Auto-Complete'")
+            # '' = let Sanctuary guess; 'me' / 'ai' = the user's own choice
+            self._ensure_column(conn, "proactive_suggestions", "assignee", "TEXT DEFAULT ''")
+            self._ensure_column(conn, "proactive_suggestions", "ai_draft", "TEXT DEFAULT ''")
+            self._ensure_column(conn, "proactive_suggestions", "cleared_at", "TEXT DEFAULT ''")
             self._ensure_column(conn, "triaged_emails", "target_url", "TEXT DEFAULT ''")
             self._ensure_column(conn, "triaged_emails", "local_file_path", "TEXT DEFAULT ''")
             self._ensure_column(conn, "triaged_emails", "attachment_label", "TEXT DEFAULT ''")

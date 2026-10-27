@@ -2,14 +2,85 @@
 
 import json
 import os
+import re
 import subprocess
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from backend.ai.router import DualAIRouter
 from backend.database import Database
 from backend.engine.gamification import GamificationEngine
+
+URGENCY_RANK = {"urgent": 0, "soon": 1, "later": 2}
+
+# Tasks that need the person themselves. Checked first, so assessed MSc work and
+# clinical work never default to "AI can help".
+_ME_HINTS = re.compile(
+    r"\b(submit|essay|assignment|exam|placement|client|supervision|therapy|session|attend|meet\b|call\b|sign\b|pay\b|book\b)",
+    re.IGNORECASE,
+)
+_AI_HINTS = re.compile(
+    r"\b(draft|write|email|reply|respond|summar|research|plan|outline|prep|notes|agenda|letter|proposal|report|update)",
+    re.IGNORECASE,
+)
+
+DRAFT_SYSTEM_PROMPT = (
+    "You are a practical assistant drafting work for a busy UK public-sector professional who is also "
+    "a postgraduate psychotherapy student. Write in plain UK English. Never invent client details."
+)
+
+
+def clean_task_title(title: str) -> str:
+    """Strip the '⏰ [Category • Type • Priority: X]' / 'Notion:' decoration added at sync time."""
+    t = re.sub(r"^\s*⏰\s*", "", title or "")
+    t = re.sub(r"^\[[^\]]*\]\s*", "", t)
+    return re.sub(r"^Notion:\s*", "", t).strip()
+
+
+def _parse_due_date(due_context: str) -> Optional[date]:
+    m = re.match(r"^(\d{4}-\d{2}-\d{2})", due_context or "")
+    if not m:
+        return None
+    try:
+        return datetime.strptime(m.group(1), "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def classify_urgency(suggestion: Dict[str, Any], today: date) -> str:
+    """'urgent' (red), 'soon' (amber) or 'later' (green), from the due date plus Notion Priority."""
+    priority = re.search(r"Priority:\s*([^\]•]+)", suggestion.get("title") or "")
+    is_high = bool(priority) and priority.group(1).strip().lower() in ("high", "urgent", "critical")
+
+    due_context = suggestion.get("due_context") or ""
+    due = _parse_due_date(due_context)
+    if due:
+        days = (due - today).days
+        if days <= 1:
+            return "urgent"
+        if days <= 7:
+            return "urgent" if is_high else "soon"
+        return "later"
+
+    # Hand-written contexts like "Today before 2:00 PM"
+    if due_context.strip().lower().startswith(("today", "tomorrow", "overdue")):
+        return "urgent"
+    return "soon" if is_high else "later"
+
+
+def guess_assignee(suggestion: Dict[str, Any]) -> str:
+    """'me' or 'ai'. The user's own choice always wins over the guess."""
+    if suggestion.get("assignee") in ("me", "ai"):
+        return suggestion["assignee"]
+    if suggestion.get("inline_action_type") == "jump_inbox":
+        return "ai"
+    title = clean_task_title(suggestion.get("title") or "")
+    if _ME_HINTS.search(title):
+        return "me"
+    if _AI_HINTS.search(title):
+        return "ai"
+    return "me"
 
 
 class BriefingHorizonEngine:
@@ -37,13 +108,25 @@ class BriefingHorizonEngine:
             accounts_rows = conn.execute(
                 "SELECT id, provider, account_label, account_identifier, color_tag, portal_url, last_synced_at FROM connected_accounts WHERE is_active = 1"
             ).fetchall()
+            today_start = datetime.now().strftime("%Y-%m-%d")
+            done_rows = conn.execute(
+                "SELECT * FROM proactive_suggestions WHERE is_cleared = 1 AND cleared_at >= ? ORDER BY cleared_at DESC LIMIT 30",
+                (today_start,),
+            ).fetchall()
+
+        today = datetime.now().date()
+
+        def decorate(row: Any) -> Dict[str, Any]:
+            d = dict(row)
+            d["micro_steps"] = json.loads(d.get("micro_steps_json") or "[]")
+            d["urgency"] = classify_urgency(d, today)
+            d["assignee_is_choice"] = d.get("assignee") in ("me", "ai")
+            d["assignee"] = guess_assignee(d)
+            return d
 
         events = [dict(r) for r in events_rows]
-        all_suggestions = []
-        for r in suggestions_rows:
-            d = dict(r)
-            d["micro_steps"] = json.loads(d.get("micro_steps_json") or "[]")
-            all_suggestions.append(d)
+        all_suggestions = [decorate(r) for r in suggestions_rows]
+        done_today = [decorate(r) for r in done_rows]
 
         today_events = [e for e in events if e["horizon"] == "1d"]
         avg_social = (
@@ -63,6 +146,9 @@ class BriefingHorizonEngine:
             h = s.get("horizon", "1d")
             if h in raw_horizons:
                 raw_horizons[h].append(s)
+        # Red before amber before green, so the per-mode caps below never hide an urgent item
+        for items in raw_horizons.values():
+            items.sort(key=lambda s: URGENCY_RANK[s["urgency"]])
 
         total_active_suggestions = len(all_suggestions)
 
@@ -117,6 +203,12 @@ class BriefingHorizonEngine:
             },
             "daily_boss": daily_boss,
             "horizons": horizons,
+            "done_today": done_today,
+            "status_counts": {
+                "urgent": sum(1 for s in all_suggestions if s["urgency"] == "urgent"),
+                "soon": sum(1 for s in all_suggestions if s["urgency"] == "soon"),
+                "done_today": len(done_today),
+            },
             "events_by_horizon": {
                 "1d": [e for e in events if e["horizon"] == "1d"],
                 "2d": [e for e in events if e["horizon"] == "2d"],
@@ -218,8 +310,8 @@ class BriefingHorizonEngine:
 
             item = dict(row)
             conn.execute(
-                "UPDATE proactive_suggestions SET is_cleared = 1 WHERE id = ?",
-                (suggestion_id,),
+                "UPDATE proactive_suggestions SET is_cleared = 1, cleared_at = ? WHERE id = ?",
+                (datetime.now().isoformat(), suggestion_id),
             )
 
             is_boss = bool(item.get("is_daily_boss"))
@@ -264,6 +356,76 @@ class BriefingHorizonEngine:
             "cleared_item": item,
             "progress": updated_progress,
         }
+
+    def reopen_suggestion(self, suggestion_id: int) -> Dict[str, Any]:
+        """Undo an accidental 'Done': put the task back on the list and drop its Done-tab entry."""
+        with self.db.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM proactive_suggestions WHERE id = ?", (suggestion_id,)
+            ).fetchone()
+            if not row:
+                return {"ok": False, "error": "Suggestion not found"}
+            conn.execute(
+                "UPDATE proactive_suggestions SET is_cleared = 0, cleared_at = '' WHERE id = ?",
+                (suggestion_id,),
+            )
+            conn.execute(
+                """
+                DELETE FROM cleared_vault WHERE id = (
+                    SELECT id FROM cleared_vault WHERE title = ? ORDER BY id DESC LIMIT 1
+                )
+                """,
+                (row["title"],),
+            )
+        return {"ok": True, "suggestion_id": suggestion_id}
+
+    def set_assignee(self, suggestion_id: int, assignee: str) -> Dict[str, Any]:
+        """Record the user's own 'You' / 'AI can help' choice so future guesses never override it."""
+        if assignee not in ("me", "ai"):
+            return {"ok": False, "error": "Assignee must be 'me' or 'ai'"}
+        with self.db.connect() as conn:
+            cur = conn.execute(
+                "UPDATE proactive_suggestions SET assignee = ? WHERE id = ?",
+                (assignee, suggestion_id),
+            )
+            if cur.rowcount == 0:
+                return {"ok": False, "error": "Suggestion not found"}
+        return {"ok": True, "suggestion_id": suggestion_id, "assignee": assignee}
+
+    def draft_with_ai(self, suggestion_id: int) -> Dict[str, Any]:
+        """Ask Claude/Gemini to do as much of a task as it can, as text the user can copy."""
+        with self.db.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM proactive_suggestions WHERE id = ?", (suggestion_id,)
+            ).fetchone()
+        if not row:
+            return {"ok": False, "error": "Suggestion not found"}
+
+        prompt = (
+            f"Task: {clean_task_title(row['title'])}\n"
+            f"Due: {row['due_context'] or 'not set'}\n"
+            f"From: {row['source_label']}\n\n"
+            "Do as much of this task for me as you can, as text I can copy and use.\n"
+            "- If it needs an email or message, write it.\n"
+            "- If it needs a document, write a first draft or a clear outline.\n"
+            "- If it is assessed university work (an essay, assignment or reflective piece), do NOT write "
+            "the assessed text. Give a short plan, the key questions to answer and a reading checklist instead.\n"
+            "Keep it under 300 words. No preamble."
+        )
+        res = self.ai.generate(prompt, system_prompt=DRAFT_SYSTEM_PROMPT, prefer="claude")
+        draft = (res.get("text") or "").strip()
+        if not draft:
+            return {
+                "ok": False,
+                "error": "AI isn't available right now. Check the Claude or Gemini key in settings.",
+            }
+
+        with self.db.connect() as conn:
+            conn.execute(
+                "UPDATE proactive_suggestions SET ai_draft = ? WHERE id = ?",
+                (draft, suggestion_id),
+            )
+        return {"ok": True, "suggestion_id": suggestion_id, "draft": draft, "provider": res.get("provider", "")}
 
     def generate_micro_steps_for_suggestion(self, suggestion_id: int) -> Dict[str, Any]:
         """Use the Dual AI Engine to break a suggestion into tiny 60-second micro-steps."""

@@ -62,13 +62,6 @@ body {
   transition: background-color 0.25s ease, color 0.25s ease;
 }
 
-.confetti-canvas {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 9999;
-}
-
 .app-shell {
   max-width: 960px;
   margin: 0 auto;
@@ -314,7 +307,7 @@ body {
 
 .nav-tab.active {
   color: var(--text-primary);
-  border-bottom-color: var(--accent-primary);
+  border-bottom-color: var(--text-primary);
 }
 
 .nav-count {
@@ -358,7 +351,7 @@ body {
    ========================================================================== */
 .roulette-banner {
   background: var(--bg-surface);
-  border: 1.5px solid var(--accent-primary);
+  border: 1.5px solid var(--text-muted);
   border-radius: 14px;
   padding: 16px 20px;
   margin-bottom: 18px;
@@ -379,7 +372,7 @@ body {
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--accent-primary);
+  color: var(--text-muted);
   margin-bottom: 4px;
 }
 
@@ -480,7 +473,7 @@ body {
 .meter-fill {
   display: block;
   height: 100%;
-  background: var(--accent-primary);
+  background: var(--text-muted);
   opacity: 0.7;
   border-radius: 99px;
 }
@@ -699,8 +692,8 @@ body {
    BUTTONS & INPUTS
    ========================================================================== */
 .btn-primary {
-  background: var(--accent-primary);
-  color: #ffffff;
+  background: var(--text-primary);
+  color: var(--bg-surface);
   border: none;
   font-size: 0.83rem;
   font-weight: 600;
@@ -711,7 +704,7 @@ body {
 }
 
 .btn-primary:hover {
-  background: var(--accent-primary-hover);
+  opacity: 0.85;
 }
 
 .btn-secondary {
@@ -1227,39 +1220,21 @@ body {
    SIMPLE TODAY VIEW: slim battery line, "next thing", short task cards
    ========================================================================== */
 :root[data-theme="light"] {
-  --deadline: #b45309;
-  --deadline-soft: #fef3c7;
+  --urgent: #c0392b;
+  --urgent-soft: #fdecea;
+  --soon: #b45309;
+  --soon-soft: #fef3c7;
+  --later: #2f7d55;
+  --later-soft: #e3f3ea;
 }
 
 :root[data-theme="dark"] {
-  --deadline: #f59e0b;
-  --deadline-soft: rgba(245, 158, 11, 0.14);
-}
-
-.xp-mini {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  background: transparent;
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  padding: 7px 11px;
-  font-family: inherit;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.xp-mini .xp-bar-track {
-  display: inline-block;
-  width: 56px;
-  margin: 0;
-}
-
-.xp-mini .xp-bar-fill {
-  display: block;
-  background: var(--accent-primary);
+  --urgent: #f87171;
+  --urgent-soft: rgba(248, 113, 113, 0.15);
+  --soon: #fbbf24;
+  --soon-soft: rgba(251, 191, 36, 0.14);
+  --later: #4ade80;
+  --later-soft: rgba(74, 222, 128, 0.12);
 }
 
 .battery-strip {
@@ -1288,13 +1263,15 @@ body {
   color: var(--text-muted);
 }
 
-.next-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-color);
-  border-left: 4px solid var(--accent-primary);
-  border-radius: 14px;
-  padding: 20px 22px;
-  margin-bottom: 30px;
+.task-card.next-card {
+  padding: 18px 20px;
+  margin-bottom: 28px;
+}
+
+.next-card .card-title {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 1.2rem;
+  line-height: 1.35;
 }
 
 .next-eyebrow {
@@ -1302,8 +1279,8 @@ body {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--accent-primary);
-  margin-bottom: 6px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
 }
 
 .next-title {
@@ -1339,13 +1316,11 @@ body {
   margin-bottom: 2px;
 }
 
-.task-card .card-more {
+.task-card > .next-eyebrow,
+.task-card > .next-start,
+.task-card > .ai-draft,
+.task-card > .card-more {
   grid-column: 1 / -1;
-}
-
-.next-card.is-deadline,
-.task-card.is-deadline {
-  border-left-color: var(--deadline);
 }
 
 .task-actions {
@@ -1356,17 +1331,6 @@ body {
 .card-meta {
   font-size: 0.8rem;
   color: var(--text-muted);
-}
-
-.deadline-label {
-  display: inline-block;
-  background: var(--deadline-soft);
-  color: var(--deadline);
-  font-size: 0.7rem;
-  font-weight: 700;
-  padding: 1px 8px;
-  border-radius: 99px;
-  margin-right: 6px;
 }
 
 .card-more {
@@ -1448,8 +1412,153 @@ body {
     font-size: 0.86rem;
   }
 
-  .hud-cluster .btn-secondary,
-  .xp-mini {
+  .hud-cluster .btn-secondary {
     white-space: nowrap;
+  }
+}
+
+/* ==========================================================================
+   URGENCY COLOURS, YOU / AI LABELS, AI DRAFTS, DONE TODAY
+   Colour means urgency and nothing else; everything else stays neutral.
+   ========================================================================== */
+.task-card.u-urgent { border-left-color: var(--urgent); }
+.task-card.u-soon { border-left-color: var(--soon); }
+.task-card.u-later { border-left-color: var(--later); }
+
+.status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.86rem;
+  font-weight: 700;
+  padding: 6px 12px;
+  border-radius: 99px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+
+.status-chip.u-urgent { background: var(--urgent-soft); color: var(--urgent); }
+.status-chip.u-soon { background: var(--soon-soft); color: var(--soon); }
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.card-labels {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 3px;
+}
+
+.urgency-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 99px;
+}
+
+.urgency-label.u-urgent { background: var(--urgent-soft); color: var(--urgent); }
+.urgency-label.u-soon { background: var(--soon-soft); color: var(--soon); }
+.urgency-label.u-later { background: var(--later-soft); color: var(--later); }
+
+.who-chip {
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 99px;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.who-chip:hover {
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.who-chip.who-ai {
+  border-style: dashed;
+}
+
+.deadline-word {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.btn-ai {
+  background: transparent;
+  color: var(--text-primary);
+  border: 1px dashed var(--text-muted);
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.btn-ai:hover {
+  border-style: solid;
+}
+
+.btn-ai:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.ai-draft {
+  margin-top: 8px;
+  background: var(--bg-elevated);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.ai-draft summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.ai-draft-text {
+  white-space: pre-wrap;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  margin: 10px 0;
+}
+
+#done-today-section.hidden {
+  display: none;
+}
+
+.task-card.is-done {
+  opacity: 0.55;
+  border-left-color: var(--border-color);
+}
+
+.task-card.is-done .card-title {
+  font-weight: 600;
+}
+
+.done-tick {
+  color: var(--text-secondary);
+  margin-right: 4px;
+}
+
+@media (max-width: 640px) {
+  .task-actions {
+    flex-wrap: wrap;
   }
 }

@@ -68,42 +68,6 @@ const App = {
     } catch (_) {}
   },
 
-  burstConfetti() {
-    const canvas = document.getElementById('confetti-canvas');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-
-    const pieces = Array.from({ length: 65 }, () => ({
-      x: canvas.width / 2 + (Math.random() - 0.5) * 180,
-      y: canvas.height / 3,
-      vx: (Math.random() - 0.5) * 12,
-      vy: -Math.random() * 10 - 4,
-      size: Math.random() * 7 + 4,
-      color: ['#2d6a4f', '#eab308', '#6366f1', '#ec4899', '#10b981'][Math.floor(Math.random() * 5)],
-      alpha: 1,
-    }));
-
-    let frame = 0;
-    const animate = () => {
-      frame++;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      pieces.forEach((p) => {
-        p.x += p.vx;
-        p.y += p.vy;
-        p.vy += 0.32;
-        p.alpha = Math.max(0, 1 - frame / 65);
-        ctx.fillStyle = p.color;
-        ctx.globalAlpha = p.alpha;
-        ctx.fillRect(p.x, p.y, p.size, p.size);
-      });
-      if (frame < 65) requestAnimationFrame(animate);
-      else ctx.clearRect(0, 0, canvas.width, canvas.height);
-    };
-    requestAnimationFrame(animate);
-  },
-
   /* ------------------------------------------------------------------------
      DIRECT TARGET LAUNCHER & 1-CLICK AUTO-COMPLETE ENGINE
      ------------------------------------------------------------------------ */
@@ -131,7 +95,6 @@ const App = {
     if (autoComplete) {
       this.clearPinnedTask();
       this.playChime(isBoss);
-      if (isBoss) this.burstConfetti();
       this.updateHUD(res.progress);
       await this.loadBriefing();
       await this.loadVault(this.state.selectedVaultWindow);
@@ -187,33 +150,17 @@ const App = {
      ------------------------------------------------------------------------ */
   updateHUD(progress) {
     if (!progress) return;
-    document.getElementById('hud-level').textContent = `Level ${progress.level}`;
-    document.getElementById('hud-xp-fill').style.width = `${progress.xp_in_current_level}%`;
-    const shieldText = progress.grace_shield_active_today ? ' • Grace Shield on' : '';
-    document.getElementById('hud-xp').title =
-      `${progress.level_title} • ${progress.xp} XP • ${progress.xp_to_next_level} XP to level ${progress.level + 1} • ` +
-      `${progress.momentum_days}-day streak${shieldText}`;
-
+    // XP is still recorded by the backend but deliberately not shown anywhere
     document.querySelectorAll('.spoon-btn').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.mode === progress.energy_mode);
     });
 
-    const badgesRow = document.getElementById('vault-badges-row');
-    if (badgesRow && progress.badges) {
-      badgesRow.innerHTML = progress.badges
-        .map((b) => `<span class="badge-chip" title="${this.escape(b.desc)}">${b.icon} ${this.escape(b.name)}</span>`)
-        .join('');
-    }
-
     if (progress.last_reward) {
-      const r = progress.last_reward;
-      const sparkText = r.mystery_spark_bonus ? ` (+${r.mystery_spark_bonus} Mystery Spark Bonus!)` : '';
-      const lvlText = r.leveled_up ? ` 🎉 Level ${r.new_level}!` : '';
-      const reason = String(r.reason || '').replace(
+      const reason = String(progress.last_reward.reason || '').replace(
         /^(Cleared: |Next thing done: )(.*)$/,
-        (_, prefix, title) => prefix + this.splitTitle(title).title
+        (_, prefix, title) => `Done: ${this.splitTitle(title).title}`
       );
-      this.showToast(`✨ +${r.xp_gained} XP${sparkText} · ${this.escape(reason)}${lvlText}`);
+      this.showToast(`✓ ${this.escape(reason)}`);
     }
   },
 
@@ -226,9 +173,10 @@ const App = {
       await this.loadEmails();
       if (res.progress.grace_shield_just_activated) {
         this.playChime(false);
-        this.showToast('🛡️ Low Spoons Grace Shield Activated! +20 XP for listening to your nervous system. Non-urgent clutter hidden.');
+        this.showToast('Low spoons on. Only the essentials are showing.');
       } else {
-        this.showToast(`Brain State switched to ${mode.replace('_', ' ').toUpperCase()}`);
+        const names = { high: 'High focus', steady: 'Steady', low_spoons: 'Low spoons' };
+        this.showToast(`${names[mode] || mode} on.`);
       }
     }
   },
@@ -263,7 +211,9 @@ const App = {
     document.getElementById('roulette-action').textContent = spin.micro_action;
 
     const doBtn = document.getElementById('roulette-do-btn');
-    doBtn.textContent = spin.button_label || `🚀 Do & Auto-Complete (+${spin.xp_reward} XP)`;
+    // Labels from the backend still mention XP ("& Claim +15 XP", "(+35 XP)"); strip that out
+    const label = (spin.button_label || 'Do it').replace(/\s*(&\s*)?(Claim\s*)?\(?\+\d+\s*XP\)?/gi, '').trim();
+    doBtn.textContent = label || 'Do it';
     doBtn.onclick = async () => {
       banner.classList.add('hidden');
       if (spin.type === 'email' && spin.id) {
@@ -309,31 +259,22 @@ const App = {
     document.getElementById('weather-cog-fill').style.width = `${Math.min(100, sw.cognitive_load_score * 10)}%`;
     document.getElementById('weather-status-label').textContent = sw.status_label || '';
 
+    // At a glance: what's urgent, what's due this week, what's already done
+    const c = b.status_counts || {};
+    document.getElementById('status-strip').innerHTML = `
+      <span class="status-chip u-urgent" title="Across everything Sanctuary has synced"><span class="status-dot"></span>${c.urgent || 0} urgent</span>
+      <span class="status-chip u-soon" title="Across everything Sanctuary has synced"><span class="status-dot"></span>${c.soon || 0} this week</span>
+      <span class="status-chip is-done">✓ ${c.done_today || 0} done today</span>`;
+
     // "Your next thing": the single most important task
     const bossContainer = document.getElementById('daily-boss-container');
     if (b.daily_boss) {
-      const boss = b.daily_boss;
-      const t = this.splitTitle(boss.title);
-      bossContainer.innerHTML = `
-        <article class="next-card ${t.isDeadline ? 'is-deadline' : ''}">
-          <div class="next-eyebrow">Your next thing</div>
-          <h3 class="next-title clickable-title" onclick="App.launchAndCompleteSuggestion(${boss.id}, true, false)" title="Open it">
-            ${this.escape(t.title)}
-          </h3>
-          ${this.renderTaskMeta(boss, t)}
-          ${this.starterStep(boss) ? `<p class="next-start"><strong>Start with:</strong> ${this.escape(this.starterStep(boss))}</p>` : ''}
-          <div class="card-actions-row">
-            <button class="btn-secondary" onclick="App.launchAndCompleteSuggestion(${boss.id}, true, false)">Open</button>
-            <button class="btn-primary" onclick="App.completeSuggestion(${boss.id}, true)">Done</button>
-          </div>
-          ${this.renderTaskMore(boss, true)}
-        </article>
-      `;
+      bossContainer.innerHTML = this.renderTaskCard(b.daily_boss, true);
     } else {
       bossContainer.innerHTML = `
-        <article class="next-card">
+        <article class="task-card next-card">
           <div class="next-eyebrow">Your next thing</div>
-          <h3 class="next-title">Done for today. Anything below is a bonus.</h3>
+          <h3 class="card-title">Nothing left at the top of your list.</h3>
         </article>
       `;
     }
@@ -377,11 +318,75 @@ const App = {
     if (s.due_context) bits.push(this.escape(this.formatDue(s.due_context)));
     t.tags.forEach((tag) => bits.push(this.escape(tag)));
     if (s.source_label) bits.push(this.escape(s.source_label));
+    return `<div class="card-meta">${bits.join(' · ')}</div>`;
+  },
+
+  // Colour means urgency and nothing else: red / amber / green, always with a word
+  urgencyLabel(urgency) {
+    return { urgent: 'Urgent', soon: 'This week', later: 'Can wait' }[urgency] || 'Can wait';
+  },
+
+  renderTaskCard(s, isBoss = false) {
+    const t = this.splitTitle(s.title);
+    const urgency = s.urgency || 'later';
+    const isAI = s.assignee === 'ai';
+    const starter = this.starterStep(s);
     return `
-      <div class="card-meta">
-        ${t.isDeadline ? '<span class="deadline-label">Deadline</span>' : ''}
-        ${bits.join(' · ')}
-      </div>`;
+      <article class="task-card u-${urgency} ${isBoss ? 'next-card' : ''}">
+        ${isBoss ? '<div class="next-eyebrow">Your next thing</div>' : ''}
+        <div class="task-main">
+          <h4 class="card-title clickable-title" onclick="App.launchAndCompleteSuggestion(${s.id}, ${isBoss}, false)" title="Open it">
+            ${this.escape(t.title)}
+          </h4>
+          <div class="card-labels">
+            <span class="urgency-label u-${urgency}">${this.urgencyLabel(urgency)}</span>
+            <button class="who-chip ${isAI ? 'who-ai' : 'who-me'}" onclick="App.toggleAssignee(${s.id})" title="Click to switch between You and AI can help">
+              ${isAI ? '✨ AI can help' : '👤 You'}
+            </button>
+            ${t.isDeadline ? '<span class="deadline-word">Hard deadline</span>' : ''}
+          </div>
+          ${this.renderTaskMeta(s, t)}
+        </div>
+        <div class="task-actions">
+          ${isAI && !s.ai_draft ? `<button class="btn-ai btn-sm" onclick="App.askAI(${s.id}, this)">Ask AI</button>` : ''}
+          <button class="btn-secondary btn-sm" onclick="App.launchAndCompleteSuggestion(${s.id}, ${isBoss}, false)">Open</button>
+          <button class="btn-primary btn-sm" onclick="App.completeSuggestion(${s.id}, ${isBoss})">Done</button>
+        </div>
+        ${isBoss && starter ? `<p class="next-start"><strong>Start with:</strong> ${this.escape(starter)}</p>` : ''}
+        ${this.renderDraft(s)}
+        ${this.renderTaskMore(s, isBoss)}
+      </article>`;
+  },
+
+  renderDraft(s) {
+    if (!s.ai_draft) return '';
+    return `
+      <details class="ai-draft" data-draft-id="${s.id}">
+        <summary>✨ AI draft ready</summary>
+        <div class="ai-draft-text">${this.escape(s.ai_draft)}</div>
+        <div class="card-actions-row">
+          <button class="btn-secondary btn-sm" onclick="App.copyDraft(${s.id})">Copy</button>
+          <button class="btn-ghost btn-sm" onclick="App.askAI(${s.id}, this)">Write it again</button>
+        </div>
+      </details>`;
+  },
+
+  renderDoneCard(s) {
+    const t = this.splitTitle(s.title);
+    const when = s.cleared_at ? new Date(s.cleared_at) : null;
+    const whenText = when && !Number.isNaN(when.getTime())
+      ? `Done at ${when.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`
+      : 'Done';
+    return `
+      <article class="task-card is-done">
+        <div class="task-main">
+          <h4 class="card-title"><span class="done-tick">✓</span> ${this.escape(t.title)}</h4>
+          <div class="card-meta">${whenText}${s.source_label ? ` · ${this.escape(s.source_label)}` : ''}</div>
+        </div>
+        <div class="task-actions">
+          <button class="btn-ghost btn-sm" onclick="App.reopenSuggestion(${s.id})" title="Put it back on the list">Undo</button>
+        </div>
+      </article>`;
   },
 
   // Older synced items have starter tips that describe buttons which no longer exist
@@ -466,27 +471,15 @@ const App = {
             : 'Nothing here. You are clear.'
         }</p>`;
     } else {
-      suggList.innerHTML = suggestions
-        .map((s) => {
-          const t = this.splitTitle(s.title);
-          return `
-            <article class="task-card ${t.isDeadline ? 'is-deadline' : ''}">
-              <div class="task-main">
-                <h4 class="card-title clickable-title" onclick="App.launchAndCompleteSuggestion(${s.id}, false, false)" title="Open it">
-                  ${this.escape(t.title)}
-                </h4>
-                ${this.renderTaskMeta(s, t)}
-              </div>
-              <div class="task-actions">
-                <button class="btn-secondary btn-sm" onclick="App.launchAndCompleteSuggestion(${s.id}, false, false)">Open</button>
-                <button class="btn-primary btn-sm" onclick="App.completeSuggestion(${s.id}, false)">Done</button>
-              </div>
-              ${this.renderTaskMore(s, false)}
-            </article>
-          `;
-        })
-        .join('');
+      suggList.innerHTML = suggestions.map((s) => this.renderTaskCard(s)).join('');
     }
+
+    // Finished today: stays visible (greyed) on the Today view so progress is obvious
+    const done = h === '1d' ? b.done_today || [] : [];
+    const doneSection = document.getElementById('done-today-section');
+    doneSection.classList.toggle('hidden', done.length === 0);
+    document.getElementById('done-today-heading').textContent = `Done today (${done.length})`;
+    document.getElementById('done-today-list').innerHTML = done.map((s) => this.renderDoneCard(s)).join('');
 
     const events = (b.events_by_horizon && b.events_by_horizon[h]) || [];
     const evList = document.getElementById('horizon-events-list');
@@ -526,10 +519,74 @@ const App = {
     const res = await this.api('/api/suggestions/complete', 'POST', { id });
     if (res.ok) {
       this.playChime(isBoss);
-      if (isBoss) this.burstConfetti();
       this.updateHUD(res.progress);
       await this.loadBriefing();
       await this.loadVault(this.state.selectedVaultWindow);
+    }
+  },
+
+  async reopenSuggestion(id) {
+    const res = await this.api('/api/suggestions/reopen', 'POST', { id });
+    if (res.ok) {
+      this.showToast('Put back on your list.');
+      await this.loadBriefing();
+      await this.loadVault(this.state.selectedVaultWindow);
+    }
+  },
+
+  // Every copy of a task in the current briefing (it can be both the next thing and in a list)
+  findSuggestions(id) {
+    const b = this.state.briefing;
+    if (!b) return [];
+    const all = [b.daily_boss, ...Object.values(b.horizons || {}).flat(), ...(b.done_today || [])];
+    return all.filter((s) => s && s.id === id);
+  },
+
+  async toggleAssignee(id) {
+    const current = this.findSuggestions(id)[0];
+    if (!current) return;
+    const next = current.assignee === 'ai' ? 'me' : 'ai';
+    const res = await this.api('/api/suggestions/assignee', 'POST', { id, assignee: next });
+    if (res.ok) {
+      this.findSuggestions(id).forEach((s) => {
+        s.assignee = next;
+        s.assignee_is_choice = true;
+      });
+      this.renderBriefing();
+    }
+  },
+
+  async askAI(id, btn) {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Writing...';
+    }
+    const res = await this.api('/api/suggestions/ai-draft', 'POST', { id });
+    if (!res.ok) {
+      this.showToast(this.escape(res.error || 'AI could not write a draft.'));
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Ask AI';
+      }
+      return;
+    }
+    this.findSuggestions(id).forEach((s) => {
+      s.ai_draft = res.draft;
+    });
+    this.renderBriefing();
+    document.querySelectorAll(`[data-draft-id="${id}"]`).forEach((d) => {
+      d.open = true;
+    });
+  },
+
+  async copyDraft(id) {
+    const s = this.findSuggestions(id)[0];
+    if (!s || !s.ai_draft) return;
+    try {
+      await navigator.clipboard.writeText(s.ai_draft);
+      this.showToast('Copied.');
+    } catch (_) {
+      this.showToast('Could not copy. Select the text and copy it by hand.');
     }
   },
 
@@ -618,10 +675,10 @@ const App = {
             >${this.escape(e.draft_reply)}</textarea>
             <div class="card-actions-row">
               <button class="btn-primary" onclick="App.sendEmailDraft(${e.id}, 'send')">
-                ✉️ Approve &amp; Send Here (+${e.xp_reward} XP)
+                ✉️ Approve &amp; Send Here
               </button>
               <button class="btn-secondary" onclick="App.copyAndCompleteEmail(${e.id}, ${e.xp_reward})">
-                📋 Copy Reply to Clipboard &amp; Complete (+${e.xp_reward} XP)
+                📋 Copy Reply to Clipboard &amp; Complete
               </button>
               <button class="btn-ghost" onclick="App.sendEmailDraft(${e.id}, 'draft')">
                 📥 Clear to Vault
@@ -775,13 +832,12 @@ const App = {
 
     const res = await this.api('/api/ideas', 'POST', { title, raw_spark, category });
     btn.disabled = false;
-    btn.textContent = '🧪 Park Idea & Dispatch AI Agent (+25 XP)';
+    btn.textContent = '🧪 Park Idea & Dispatch AI Agent';
 
     if (res.ok) {
       titleEl.value = '';
       sparkEl.value = '';
       this.playChime(true);
-      this.burstConfetti();
       this.updateHUD(res.progress);
       await this.loadIdeas();
       await this.loadVault(this.state.selectedVaultWindow);
@@ -853,9 +909,8 @@ const App = {
         } else {
           clearInterval(this.state.timerInterval);
           this.state.timerRunning = false;
-          btn.textContent = '▶ Start Body-Doubling Sprint (+30 XP)';
+          btn.textContent = '▶ Start Body-Doubling Sprint';
           this.playChime(true);
-          this.burstConfetti();
           const claim = await this.api('/api/roulette/claim-instant', 'POST', {
             xp: 30,
             reason: '⏱️ Completed Body-Doubling Focus Sprint!',
@@ -872,7 +927,7 @@ const App = {
     this.state.timerSeconds = 15 * 60;
     this.updateTimerDisplay();
     const btn = document.getElementById('timer-start-btn');
-    if (btn) btn.textContent = '▶ Start Body-Doubling Sprint (+30 XP)';
+    if (btn) btn.textContent = '▶ Start Body-Doubling Sprint';
   },
 
   async breakDownCustomTask(event) {
@@ -909,8 +964,6 @@ const App = {
     }
 
     document.getElementById('vault-celebration-summary').innerHTML = this.formatBold(data.coach_celebration_summary || '');
-    document.getElementById('vault-kpi-xp').textContent = data.total_xp_earned || 0;
-    document.getElementById('vault-kpi-bosses').textContent = data.bosses_slain || 0;
     document.getElementById('vault-kpi-emails').textContent = data.emails_cleared || 0;
     document.getElementById('vault-kpi-ideas').textContent = data.ideas_parked || 0;
 
@@ -933,7 +986,6 @@ const App = {
             <article class="clean-card">
               <div class="card-meta-row">
                 <span class="source-tag">${this.escape(it.account_label)} • ${this.escape(it.cleared_at.slice(0, 16).replace('T', ' '))}</span>
-                <span class="xp-tag">+${it.xp_earned} XP ${it.was_boss ? '• 🏆 BOSS' : ''}</span>
               </div>
               ${
                 hasTarget

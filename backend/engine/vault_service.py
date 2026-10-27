@@ -67,10 +67,8 @@ class AccomplishmentVaultEngine:
             "year": "This Year (Last 12 Months)",
         }
         narrative = (
-            f"Over **{window_labels.get(window, 'this period')}**, when your brain might try to tell you "
-            f"'you haven't done enough,' here is the hard evidence: you cleared **{len(items)} meaningful items**, "
-            f"defeated **{bosses_slain} high-dread Boss Tasks**, handled **{emails_cleared} multi-inbox communications**, "
-            f"protected your focus from **{ideas_parked} shiny-object detours**, and earned **+{total_xp} XP**."
+            f"**{window_labels.get(window, 'This period')}:** you finished **{len(items)} things**, "
+            f"handled **{emails_cleared} emails** and parked **{ideas_parked} ideas** for later."
         )
 
         return {

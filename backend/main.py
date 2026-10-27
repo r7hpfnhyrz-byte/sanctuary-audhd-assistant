@@ -91,6 +91,18 @@ class AssistantApplication:
             quick_note = body.get("quick_note", "").strip()
             return 200, self.briefing.complete_suggestion(sid, quick_note=quick_note)
 
+        if method == "POST" and path == "/api/suggestions/reopen":
+            sid = int(body.get("id", 0))
+            return 200, self.briefing.reopen_suggestion(sid)
+
+        if method == "POST" and path == "/api/suggestions/assignee":
+            sid = int(body.get("id", 0))
+            return 200, self.briefing.set_assignee(sid, body.get("assignee", ""))
+
+        if method == "POST" and path == "/api/suggestions/ai-draft":
+            sid = int(body.get("id", 0))
+            return 200, self.briefing.draft_with_ai(sid)
+
         if method == "POST" and path == "/api/suggestions/micro-steps":
             sid = int(body.get("id", 0))
             return 200, self.briefing.generate_micro_steps_for_suggestion(sid)
