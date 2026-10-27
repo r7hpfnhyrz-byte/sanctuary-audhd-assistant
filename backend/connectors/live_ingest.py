@@ -5,6 +5,7 @@ import imaplib
 import json
 import re
 import smtplib
+import urllib.error
 import urllib.request
 from datetime import datetime, timedelta
 from email.header import decode_header
@@ -22,13 +23,19 @@ class LiveIngestionEngine:
     def __init__(self, db: Database, ai: DualAIRouter) -> None:
         self.db = db
         self.ai = ai
+        # Set by fetch_notion_workspace_items whenever the Notion API call itself fails,
+        # so the sync endpoint can tell the dashboard WHY 0 items came back instead of
+        # silently swallowing the error (401 invalid token, network issue, etc.)
+        self.last_notion_error: str = ""
 
     # -------------------------------------------------------------------------
     # 1. FULL NOTION ENVIRONMENT CRAWLER (Pages, Databases, Rows & To-Do Blocks)
     # -------------------------------------------------------------------------
     def fetch_notion_workspace_items(self, notion_token: str, account_label: str) -> List[Dict[str, Any]]:
         """Paginate through the entire Notion workspace: discover all databases, pages, rows, due dates, and unchecked to-do blocks."""
+        self.last_notion_error = ""
         if not notion_token:
+            self.last_notion_error = "No Notion API key configured."
             return []
 
         headers = {
@@ -61,8 +68,23 @@ class LiveIngestionEngine:
                     if not data.get("has_more") or not data.get("next_cursor"):
                         break
                     next_cursor = data.get("next_cursor")
-            except Exception:
+            except urllib.error.HTTPError as exc:
+                try:
+                    body = json.loads(exc.read().decode("utf-8"))
+                    notion_msg = body.get("message", "")
+                except Exception:
+                    notion_msg = ""
+                self.last_notion_error = f"Notion API rejected the request (HTTP {exc.code}): {notion_msg or exc.reason}"
                 break
+            except Exception as exc:
+                self.last_notion_error = f"Could not reach Notion API: {exc}"
+                break
+
+        if not all_objects and not self.last_notion_error:
+            self.last_notion_error = (
+                "Notion API call succeeded but returned 0 shared pages/databases — "
+                "the integration likely isn't connected to anything yet."
+            )
 
         items: List[Dict[str, Any]] = []
         seen_ids = set()
@@ -557,6 +579,7 @@ class LiveIngestionEngine:
         emails_added = 0
         notion_suggestions_added = 0
         synced_notion_tokens = set()
+        notion_debug = ""
         now_iso = datetime.now().isoformat()
 
         for acc in accounts:
@@ -572,10 +595,20 @@ class LiveIngestionEngine:
                     or creds.get("api_token")
                     or Config.NOTION_API_KEY
                 )
-                if not token or token in synced_notion_tokens:
+                if not token:
+                    notion_debug = "No Notion API key is configured for this account or via NOTION_API_KEY."
+                    continue
+                if token in synced_notion_tokens:
                     continue
                 synced_notion_tokens.add(token)
                 notion_items = self.fetch_notion_workspace_items(token, label)
+                if self.last_notion_error:
+                    notion_debug = self.last_notion_error
+                elif not notion_items:
+                    notion_debug = (
+                        "Notion returned shared pages, but every one was already marked Done "
+                        "or had no readable title — none were usable tasks."
+                    )
                 with self.db.connect() as conn:
                     existing_urls = {
                         r["target_url"]
@@ -642,6 +675,12 @@ class LiveIngestionEngine:
                             ),
                         )
                         notion_suggestions_added += 1
+
+                    if notion_items and notion_suggestions_added == 0 and not notion_debug:
+                        notion_debug = (
+                            f"Notion returned {len(notion_items)} item(s), but all were already "
+                            "synced in a previous run — nothing new to add."
+                        )
 
             # B. Calendar live iCal (.ics) sync
             ics_url = creds.get("ics_url") or ""
@@ -782,5 +821,6 @@ class LiveIngestionEngine:
             "events_synced": events_added,
             "emails_triaged": emails_added,
             "notion_items_synced": notion_suggestions_added,
+            "notion_debug": notion_debug,
             "cleared_demo": clear_demo_data,
         }
