@@ -582,6 +582,12 @@ class LiveIngestionEngine:
         notion_debug = ""
         now_iso = datetime.now().isoformat()
 
+        if not any(a["provider"] == "notion" for a in accounts):
+            notion_debug = (
+                "No active Notion account found under Connected Accounts (⚙️ menu) — "
+                "the Notion sync step was skipped entirely."
+            )
+
         for acc in accounts:
             creds = json.loads(acc.get("credentials_json") or "{}")
             provider = acc["provider"]
