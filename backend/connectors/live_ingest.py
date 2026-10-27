@@ -242,13 +242,29 @@ class LiveIngestionEngine:
         priority_label = _pick(select_props, ["priority"])
 
         due_str = ""
+        due_str_is_explicit = False
         for pname in ("due date", "deadline", "end date", "due"):
             if pname in date_props:
                 due_str = date_props[pname]
+                due_str_is_explicit = True
                 break
         if not due_str:
+            # No property is explicitly named like a deadline — fall back to any other date
+            # property (e.g. a generic "Date" field). This is a weak guess, not a real deadline,
+            # so below we refuse to trust it if it points into the distant past: a page's
+            # creation/reference date from over a month ago is not "overdue today", it's just
+            # not a deadline at all, and treating it as one buries real upcoming deadlines under
+            # stale old pages.
             non_start_dates = {k: v for k, v in date_props.items() if "start" not in k}
             due_str = next(iter(non_start_dates.values()), "") or next(iter(date_props.values()), "")
+
+        if due_str and not due_str_is_explicit:
+            try:
+                guessed_dt = datetime.strptime(due_str, "%Y-%m-%d")
+                if (now - guessed_dt).days > 30:
+                    due_str = ""
+            except Exception:
+                pass
 
         horizon = ""
         if due_str:
