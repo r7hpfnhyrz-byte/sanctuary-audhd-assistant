@@ -201,6 +201,77 @@ class TestAuDHDAssistant(unittest.TestCase):
         self.assertTrue(launch_res["auto_completed"])
         self.assertIn("launched", launch_res)
 
+    def test_10_urgency_and_assignee_rules(self) -> None:
+        from datetime import date
+
+        from backend.engine.briefing_horizon import classify_urgency, guess_assignee
+
+        today = date(2026, 10, 27)
+        self.assertEqual(classify_urgency({"title": "x", "due_context": "2025-01-12"}, today), "urgent")
+        self.assertEqual(classify_urgency({"title": "x", "due_context": "2026-10-28"}, today), "urgent")
+        self.assertEqual(classify_urgency({"title": "x", "due_context": "2026-11-01"}, today), "soon")
+        self.assertEqual(
+            classify_urgency({"title": "[7CL503 • Priority: High] x", "due_context": "2026-11-01"}, today),
+            "urgent",
+        )
+        self.assertEqual(classify_urgency({"title": "x", "due_context": "2026-12-01"}, today), "later")
+        self.assertEqual(classify_urgency({"title": "x", "due_context": "Not started"}, today), "later")
+        self.assertEqual(classify_urgency({"title": "[Priority: High] x", "due_context": ""}, today), "soon")
+        self.assertEqual(classify_urgency({"title": "x", "due_context": "Today before 2:00 PM"}, today), "urgent")
+
+        # Assessed work stays with the person even when it also says "write" or "draft"
+        self.assertEqual(guess_assignee({"title": "⏰ [7CL503 • Hard Deadline] Write reflective essay draft"}), "me")
+        self.assertEqual(guess_assignee({"title": "Notion: Draft email to placement manager"}), "me")
+        self.assertEqual(guess_assignee({"title": "Draft agenda for team meeting"}), "ai")
+        self.assertEqual(guess_assignee({"title": "Call the GP surgery"}), "me")
+        self.assertEqual(guess_assignee({"title": "Draft funding report summary"}), "ai")
+        self.assertEqual(guess_assignee({"title": "Tidy desk"}), "me")
+        # The user's own choice always wins
+        self.assertEqual(guess_assignee({"title": "Tidy desk", "assignee": "ai"}), "ai")
+
+    def test_11_done_today_undo_assignee_and_ai_draft(self) -> None:
+        _, briefing = self.app.handle_api("GET", "/api/briefing", {}, {})
+        task = briefing["horizons"]["1d"][0]
+        for key in ("urgency", "assignee", "assignee_is_choice"):
+            self.assertIn(key, task)
+
+        # Done shows up under done_today, and Undo puts it back
+        self.app.handle_api("POST", "/api/suggestions/complete", {}, {"id": task["id"]})
+        _, briefing = self.app.handle_api("GET", "/api/briefing", {}, {})
+        self.assertIn(task["id"], [d["id"] for d in briefing["done_today"]])
+        self.assertEqual(briefing["status_counts"]["done_today"], len(briefing["done_today"]))
+
+        _, res = self.app.handle_api("POST", "/api/suggestions/reopen", {}, {"id": task["id"]})
+        self.assertTrue(res["ok"])
+        _, briefing = self.app.handle_api("GET", "/api/briefing", {}, {})
+        self.assertNotIn(task["id"], [d["id"] for d in briefing["done_today"]])
+
+        # Switching You / AI sticks
+        _, res = self.app.handle_api("POST", "/api/suggestions/assignee", {}, {"id": task["id"], "assignee": "ai"})
+        self.assertTrue(res["ok"])
+        _, res = self.app.handle_api("POST", "/api/suggestions/assignee", {}, {"id": task["id"], "assignee": "robot"})
+        self.assertFalse(res["ok"])
+        _, briefing = self.app.handle_api("GET", "/api/briefing", {}, {})
+        all_items = [s for items in briefing["horizons"].values() for s in items]
+        if briefing["daily_boss"]:
+            all_items.append(briefing["daily_boss"])
+        saved = next(s for s in all_items if s["id"] == task["id"])
+        self.assertEqual(saved["assignee"], "ai")
+        self.assertTrue(saved["assignee_is_choice"])
+
+        # AI draft is saved on the task; a failed AI call reports it plainly
+        self.app.briefing.ai.generate = lambda *a, **k: {"text": "", "provider": ""}
+        _, res = self.app.handle_api("POST", "/api/suggestions/ai-draft", {}, {"id": task["id"]})
+        self.assertFalse(res["ok"])
+        self.app.briefing.ai.generate = lambda *a, **k: {"text": "Dear team,\nHere is the plan.", "provider": "Test"}
+        _, res = self.app.handle_api("POST", "/api/suggestions/ai-draft", {}, {"id": task["id"]})
+        self.assertTrue(res["ok"])
+        _, briefing = self.app.handle_api("GET", "/api/briefing", {}, {})
+        all_items = [s for items in briefing["horizons"].values() for s in items]
+        if briefing["daily_boss"]:
+            all_items.append(briefing["daily_boss"])
+        self.assertEqual(next(s for s in all_items if s["id"] == task["id"])["ai_draft"], "Dear team,\nHere is the plan.")
+
 
 if __name__ == "__main__":
     unittest.main()

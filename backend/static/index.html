@@ -10,9 +10,7 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <!-- Subtle Dopamine Toast & Confetti Layer -->
   <div id="toast-container" class="toast-container" aria-live="polite"></div>
-  <canvas id="confetti-canvas" class="confetti-canvas"></canvas>
 
   <div class="app-shell">
     <!-- Slim top bar: name + date, brain state, quick win, quiet progress, settings -->
@@ -41,12 +39,6 @@
       <div class="hud-cluster">
         <button class="btn-secondary" onclick="App.spinRoulette()" title="Stuck? Get one tiny 60-second task">
           🎲 Quick win
-        </button>
-
-        <!-- Quiet progress: one small line, click for the Wins tab -->
-        <button class="xp-mini" id="hud-xp" onclick="App.switchTab('vault')" title="Your progress">
-          <span id="hud-level">Level 1</span>
-          <span class="xp-bar-track"><span class="xp-bar-fill" id="hud-xp-fill" style="width: 0%;"></span></span>
         </button>
 
         <button class="icon-btn" onclick="App.toggleTheme()" title="Switch light / dark" id="theme-toggle-btn">
@@ -100,7 +92,7 @@
         Coach
       </button>
       <button class="nav-tab" data-tab="vault" onclick="App.switchTab('vault')">
-        Wins <span class="nav-count" id="nav-vault-count">0</span>
+        Done <span class="nav-count" id="nav-vault-count">0</span>
       </button>
     </nav>
 
@@ -108,6 +100,9 @@
          VIEW 1: TODAY (next thing, then tasks, then calendar)
          ===================================================================== -->
     <main id="tab-briefing" class="tab-view active">
+      <!-- At a glance: urgent / this week / done today -->
+      <div class="status-strip" id="status-strip"></div>
+
       <!-- Sensory & social battery: one slim line -->
       <div class="battery-strip" title="Based on today's calendar">
         <span class="battery-item">
@@ -148,6 +143,11 @@
 
         <h3 class="column-heading">Tasks</h3>
         <div id="horizon-suggestions-list" class="card-stack"></div>
+
+        <div id="done-today-section" class="hidden">
+          <h3 class="column-heading column-heading-spaced" id="done-today-heading">Done today</h3>
+          <div id="done-today-list" class="card-stack"></div>
+        </div>
 
         <h3 class="column-heading column-heading-spaced">Calendar</h3>
         <div id="horizon-events-list" class="card-stack"></div>
@@ -197,10 +197,10 @@
       <section class="sandbox-capture-hero">
         <div class="sandbox-hero-header">
           <div>
-            <div class="coach-eyebrow">PREVENT SIDE-QUEST HIJACKING • +25 XP FOCUS PROTECTED BONUS</div>
+            <div class="coach-eyebrow">PREVENT SIDE-QUEST HIJACKING</div>
             <h2 class="section-title">The "Shiny Object" Idea Sandbox &amp; Incubator</h2>
             <p class="section-subtitle">
-              When a weird and wonderful idea strikes mid-day, don't let it derail your actual priorities—and don't lose the magic either! Park it here in 10 seconds. You earn <strong>+25 XP immediately for protecting your focus</strong>, while your background AI agent (Gemini + Claude) researches feasibility, stress-tests it, and writes a full Concept Dossier for your weekend curiosity window.
+              When a weird and wonderful idea strikes mid-day, don't let it derail your actual priorities—and don't lose the magic either! Park it here in 10 seconds, while your background AI agent (Gemini + Claude) researches feasibility, stress-tests it, and writes a full Concept Dossier for your weekend curiosity window.
             </p>
           </div>
         </div>
@@ -230,7 +230,7 @@
           <div class="sandbox-submit-row">
             <span class="sandbox-hint">🛡️ Parking an idea keeps it 100% off your daily To-Do list while developing it in Notion &amp; your Sandbox.</span>
             <button type="submit" class="btn-primary" id="idea-submit-btn">
-              🧪 Park Idea &amp; Dispatch AI Agent (+25 XP)
+              🧪 Park Idea &amp; Dispatch AI Agent
             </button>
           </div>
         </form>
@@ -296,7 +296,7 @@
               <button class="chip-btn" onclick="App.setTimerMinutes(25)">25m Deep Wave</button>
             </div>
             <div class="timer-controls">
-              <button class="btn-primary" id="timer-start-btn" onclick="App.toggleTimer()">▶ Start Body-Doubling Sprint (+30 XP)</button>
+              <button class="btn-primary" id="timer-start-btn" onclick="App.toggleTimer()">▶ Start Body-Doubling Sprint</button>
               <button class="btn-ghost" onclick="App.resetTimer()">Reset</button>
             </div>
           </div>
@@ -362,8 +362,6 @@
           </div>
 
           <div class="vault-kpi-strip">
-            <div class="kpi-pill">✨ <strong id="vault-kpi-xp">0</strong> XP Earned</div>
-            <div class="kpi-pill">⚔️ <strong id="vault-kpi-bosses">0</strong> Bosses Defeated</div>
             <div class="kpi-pill">✉️ <strong id="vault-kpi-emails">0</strong> Emails Handled</div>
             <div class="kpi-pill">🛡️ <strong id="vault-kpi-ideas">0</strong> Ideas Parked</div>
           </div>
