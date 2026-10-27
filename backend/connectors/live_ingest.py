@@ -223,13 +223,20 @@ class LiveIngestionEngine:
             elif ptype == "date" and pval.get("date") and pval["date"].get("start"):
                 date_props[name_lower] = pval["date"]["start"][:10]
 
-        def _pick(options: Dict[str, str], preferred_names: List[str]) -> str:
+        def _pick(options: Dict[str, str], preferred_names: List[str], fallback_to_only_option: bool = False) -> str:
             for pname in preferred_names:
                 if pname in options:
                     return options[pname]
-            return next(iter(options.values()), "")
+            # Only Status is safe to guess when a database has just one select property —
+            # a page is very likely tracking *some* notion of status. Type/Category/Priority
+            # are NOT safe to guess this way: doing so previously copied that single value
+            # into all three, producing nonsense like "[Assignments • Assignments • Priority: Assignments]"
+            # on any page that only has one select property at all.
+            if fallback_to_only_option:
+                return next(iter(options.values()), "")
+            return ""
 
-        status_str = _pick(select_props, ["status"])
+        status_str = _pick(select_props, ["status"], fallback_to_only_option=True)
         type_label = _pick(select_props, ["type"])
         category_label = _pick(select_props, ["category"])
         priority_label = _pick(select_props, ["priority"])
