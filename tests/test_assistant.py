@@ -335,5 +335,40 @@ class TestAuDHDAssistant(unittest.TestCase):
         self.assertEqual(sum("Claude (" in e for e in res["errors"]), 1)
 
 
+    def test_13_ai_router_pauses_after_usage_limits(self) -> None:
+        import io
+        import json
+        import urllib.error
+        from unittest import mock
+
+        from backend.ai.router import DualAIRouter
+
+        router = DualAIRouter()
+        router.claude_key = "sk-test"
+        router.gemini_key = "gm-test"
+        router.refresh_keys = lambda: None
+        calls = []
+
+        def limited(req, timeout=0):
+            calls.append("claude" if "anthropic" in req.full_url else "gemini")
+            if "anthropic" in req.full_url:
+                code, msg = 400, "You have reached your specified API usage limits."
+            else:
+                code, msg = 429, "Quota exceeded for metric: generate_content_free_tier_requests"
+            body = io.BytesIO(json.dumps({"error": {"message": msg}}).encode())
+            raise urllib.error.HTTPError(req.full_url, code, "err", {}, body)
+
+        with mock.patch("urllib.request.urlopen", limited):
+            first = router.generate("hi", prefer="claude")
+            # One attempt per provider: a spend cap or quota applies to every model on the account
+            self.assertEqual(calls, ["claude", "gemini"])
+            self.assertIn("usage limits", " ".join(first["errors"]))
+
+            second = router.generate("hi", prefer="claude")
+            self.assertEqual(calls, ["claude", "gemini"])  # both skipped while paused
+            self.assertEqual(second["text"], "")
+            self.assertTrue(all("paused until" in e for e in second["errors"]))
+
+
 if __name__ == "__main__":
     unittest.main()
