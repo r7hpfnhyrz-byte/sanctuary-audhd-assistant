@@ -18,6 +18,7 @@ const App = {
   },
 
   async init() {
+    this.checkSecurity();
     await Promise.all([
       this.loadBriefing(),
       this.loadEmails(),
@@ -25,6 +26,14 @@ const App = {
       this.loadVault('week'),
       this.loadCoachMessages(),
     ]);
+  },
+
+  async checkSecurity() {
+    try {
+      const health = await this.api('/api/health');
+      const isProtected = health && health.config && health.config.password_protected;
+      document.getElementById('security-banner').classList.toggle('hidden', Boolean(isProtected));
+    } catch (_) {}
   },
 
   async api(path, method = 'GET', body = null) {

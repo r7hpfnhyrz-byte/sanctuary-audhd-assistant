@@ -1665,3 +1665,16 @@ body {
 #tab-vault .section-header-bar {
   align-items: center;
 }
+
+.security-banner {
+  background: var(--urgent-soft);
+  color: var(--urgent);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  margin-bottom: 14px;
+}
+
+.security-banner.hidden {
+  display: none;
+}

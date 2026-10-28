@@ -50,6 +50,12 @@
       </div>
     </header>
 
+    <!-- Shown only when the server has no SANCTUARY_PASSWORD set -->
+    <div id="security-banner" class="security-banner hidden" role="alert">
+      <strong>No password set.</strong> Anyone with this link can see your emails, calendar and tasks.
+      Add <code>SANCTUARY_PASSWORD</code> in Render to lock it.
+    </div>
+
     <!-- Sticky bar: shows while a task is open in another tab, so marking it done is one click -->
     <div id="pinned-task-bar" class="pinned-task-bar hidden">
       <div class="pinned-task-info">
