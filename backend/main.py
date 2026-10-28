@@ -1,5 +1,7 @@
 """Main HTTP & Cloud Server for the 24/7 AuDHD Personal Assistant & Executive Function Coach."""
 
+import base64
+import hmac
 import json
 import mimetypes
 import os
@@ -323,11 +325,38 @@ class AssistantApplication:
 app_instance = AssistantApplication()
 
 
+# Reachable without the password: Render's health check, and Notion's webhook (which can't log in)
+PUBLIC_PATHS = {"/api/health", "/api/webhooks/notion"}
+
+
 class AssistantHTTPRequestHandler(BaseHTTPRequestHandler):
     """Zero-dependency HTTP handler serving the Web UI and REST API."""
 
     def log_message(self, format: str, *args: Any) -> None:
         pass
+
+    def _authorised(self, path: str) -> bool:
+        """Browser login prompt (HTTP Basic auth) when SANCTUARY_PASSWORD is set. Any username works."""
+        password = Config.SANCTUARY_PASSWORD
+        if not password or path in PUBLIC_PATHS:
+            return True
+        header = self.headers.get("Authorization", "")
+        if header.startswith("Basic "):
+            try:
+                _, _, supplied = base64.b64decode(header[6:]).decode("utf-8").partition(":")
+                if hmac.compare_digest(supplied.encode("utf-8"), password.encode("utf-8")):
+                    return True
+            except Exception:
+                pass
+            time.sleep(1)  # slow down password guessing
+        raw = b"Sanctuary needs a password."
+        self.send_response(401)
+        self.send_header("WWW-Authenticate", 'Basic realm="Sanctuary", charset="UTF-8"')
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+        return False
 
     def _send_json(self, status: int, payload: Dict[str, Any]) -> None:
         raw = json.dumps(payload).encode("utf-8")
@@ -356,6 +385,8 @@ class AssistantHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
+        if not self._authorised(parsed.path):
+            return
         if parsed.path.startswith("/api/"):
             qs = {k: v[0] for k, v in urllib.parse.parse_qs(parsed.query).items()}
             status, payload = app_instance.handle_api("GET", parsed.path, qs, {})
@@ -365,6 +396,8 @@ class AssistantHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urllib.parse.urlparse(self.path)
+        if not self._authorised(parsed.path):
+            return
         length = int(self.headers.get("Content-Length", "0"))
         raw_body = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
         try:

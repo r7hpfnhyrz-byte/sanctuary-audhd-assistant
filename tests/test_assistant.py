@@ -384,5 +384,51 @@ class TestAuDHDAssistant(unittest.TestCase):
             self.assertTrue(all("paused until" in e for e in second["errors"]))
 
 
+    def test_14_password_protects_pages_and_api(self) -> None:
+        import base64
+        import threading
+        import urllib.error
+        import urllib.request
+        from http.server import ThreadingHTTPServer
+        from unittest import mock
+
+        from backend.main import AssistantHTTPRequestHandler
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), AssistantHTTPRequestHandler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{server.server_address[1]}"
+        no_proxy = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+        def status(path, password=None, method="GET"):
+            req = urllib.request.Request(base + path, method=method, data=b"{}" if method == "POST" else None)
+            if password is not None:
+                token = base64.b64encode(f"rob:{password}".encode()).decode()
+                req.add_header("Authorization", f"Basic {token}")
+            try:
+                with no_proxy.open(req, timeout=10) as resp:
+                    return resp.status, resp.headers
+            except urllib.error.HTTPError as exc:
+                return exc.code, exc.headers
+
+        try:
+            with mock.patch("backend.main.Config.SANCTUARY_PASSWORD", ""):
+                self.assertEqual(status("/")[0], 200)  # no password configured: open, as before
+
+            with mock.patch("backend.main.Config.SANCTUARY_PASSWORD", "correct horse"):
+                code, headers = status("/")
+                self.assertEqual(code, 401)
+                self.assertIn("Basic", headers.get("WWW-Authenticate", ""))
+                self.assertEqual(status("/api/briefing")[0], 401)
+                self.assertEqual(status("/api/sync/live", method="POST")[0], 401)
+                self.assertEqual(status("/api/briefing", password="wrong")[0], 401)
+                self.assertEqual(status("/api/briefing", password="correct horse")[0], 200)
+                self.assertEqual(status("/", password="correct horse")[0], 200)
+                # Render's health check must still work without the password
+                self.assertEqual(status("/api/health")[0], 200)
+        finally:
+            server.shutdown()
+            server.server_close()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -40,6 +40,9 @@ class Config:
     ANTHROPIC_API_KEY: str = os.environ.get("ANTHROPIC_API_KEY", "")
     ANTHROPIC_MODEL: str = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5-5")
 
+    # Password for the web app (browser login prompt). Empty = no password, anyone with the link gets in.
+    SANCTUARY_PASSWORD: str = os.environ.get("SANCTUARY_PASSWORD", "")
+
     # Notion Integration Key
     NOTION_API_KEY: str = os.environ.get("NOTION_API_KEY", "")
 
@@ -74,6 +77,7 @@ class Config:
             "gemini_configured": bool(cls.GEMINI_API_KEY),
             "claude_configured": bool(cls.ANTHROPIC_API_KEY),
             "notion_configured": bool(cls.NOTION_API_KEY),
+            "password_protected": bool(cls.SANCTUARY_PASSWORD),
             "google_oauth_configured": bool(cls.GOOGLE_CLIENT_ID and cls.GOOGLE_CLIENT_SECRET),
             "microsoft_oauth_configured": bool(cls.MS_CLIENT_ID and cls.MS_CLIENT_SECRET),
             "briefing_time": cls.BRIEFING_TIME_LOCAL,
