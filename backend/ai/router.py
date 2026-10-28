@@ -2,6 +2,7 @@
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from typing import Any, Dict, List, Optional
@@ -28,6 +29,8 @@ class DualAIRouter:
         self.gemini_key = os.environ.get("GEMINI_API_KEY", Config.GEMINI_API_KEY)
         self.claude_key = os.environ.get("ANTHROPIC_API_KEY", Config.ANTHROPIC_API_KEY)
         self.last_errors: List[str] = []
+        # provider -> time.time() until which it is skipped after an account-level limit
+        self.paused_until: Dict[str, float] = {}
 
     def refresh_keys(self) -> None:
         self.gemini_key = os.environ.get("GEMINI_API_KEY", Config.GEMINI_API_KEY)
@@ -43,6 +46,17 @@ class DualAIRouter:
         except Exception:
             msg = ""
         return f"HTTP {exc.code}: {msg or exc.reason}"
+
+    PAUSE_SECONDS = 15 * 60
+
+    @staticmethod
+    def _is_account_limit(code: int, text: str) -> bool:
+        """Spend caps, quotas and billing problems apply to the whole account, so other models won't help."""
+        low = text.lower()
+        return code == 429 or any(k in low for k in ("usage limit", "credit balance", "quota", "billing"))
+
+    def _pause(self, provider: str) -> None:
+        self.paused_until[provider] = time.time() + self.PAUSE_SECONDS
 
     def call_claude(self, system_prompt: str, user_prompt: str, max_tokens: int = 2000) -> Optional[str]:
         """Call Anthropic Claude Messages API via standard HTTPS (supports x-api-key and Bearer tokens)."""
@@ -86,7 +100,11 @@ class DualAIRouter:
                         data = json.loads(resp.read().decode("utf-8"))
                 except urllib.error.HTTPError as exc:
                     auth_failed = exc.code in (401, 403)
-                    self.last_errors.append(f"Claude ({model_name}): {self._http_error_text(exc)}")
+                    err_text = self._http_error_text(exc)
+                    self.last_errors.append(f"Claude ({model_name}): {err_text}")
+                    if self._is_account_limit(exc.code, err_text):
+                        self._pause("claude")
+                        return None
                     if auth_failed:
                         continue  # try the other auth header style
                     break  # model-level problem: try the next model
@@ -145,7 +163,11 @@ class DualAIRouter:
                         data = json.loads(resp.read().decode("utf-8"))
                 except urllib.error.HTTPError as exc:
                     auth_failed = exc.code in (401, 403)
-                    self.last_errors.append(f"Gemini ({model}): {self._http_error_text(exc)}")
+                    err_text = self._http_error_text(exc)
+                    self.last_errors.append(f"Gemini ({model}): {err_text}")
+                    if self._is_account_limit(exc.code, err_text):
+                        self._pause("gemini")
+                        return None
                     if auth_failed:
                         continue
                     break
@@ -178,11 +200,19 @@ class DualAIRouter:
         """
         self.last_errors = []
         order = (
-            [(self.call_claude, "Anthropic Claude"), (self.call_gemini, "Google Gemini")]
+            [(self.call_claude, "Anthropic Claude", "claude"), (self.call_gemini, "Google Gemini", "gemini")]
             if prefer == "claude"
-            else [(self.call_gemini, "Google Gemini"), (self.call_claude, "Anthropic Claude")]
+            else [(self.call_gemini, "Google Gemini", "gemini"), (self.call_claude, "Anthropic Claude", "claude")]
         )
-        for call, provider in order:
+        for call, provider, key in order:
+            resume_at = self.paused_until.get(key, 0)
+            if time.time() < resume_at:
+                # Don't hammer an account that just told us it's over its limit (e.g. once per email in a sync)
+                self.last_errors.append(
+                    f"{key.capitalize()}: paused until {time.strftime('%H:%M', time.localtime(resume_at))} "
+                    "after a usage-limit error."
+                )
+                continue
             text = call(system_prompt, user_prompt)
             if text:
                 return {"text": text, "provider": provider, "errors": []}
