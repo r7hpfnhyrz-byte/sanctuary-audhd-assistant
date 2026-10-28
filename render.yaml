@@ -4,6 +4,12 @@ services:
     runtime: docker
     plan: starter
     healthCheckPath: /api/health
+    # Keeps the SQLite database (/app/data/assistant.db) across deploys and restarts.
+    # Without it, every deploy wipes You/AI choices, AI drafts and the Done history.
+    disk:
+      name: sanctuary-data
+      mountPath: /app/data
+      sizeGB: 1
     envVars:
       - key: PORT
         value: 8765
