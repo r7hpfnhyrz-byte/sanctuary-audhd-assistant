@@ -415,9 +415,10 @@ class BriefingHorizonEngine:
         res = self.ai.generate(prompt, system_prompt=DRAFT_SYSTEM_PROMPT, prefer="claude")
         draft = (res.get("text") or "").strip()
         if not draft:
+            reasons = res.get("errors") or []
             return {
                 "ok": False,
-                "error": "AI isn't available right now. Check the Claude or Gemini key in settings.",
+                "error": "AI couldn't write a draft. " + (" | ".join(reasons) if reasons else "No reason was given."),
             }
 
         with self.db.connect() as conn:

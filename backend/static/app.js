@@ -563,7 +563,19 @@ const App = {
     }
     const res = await this.api('/api/suggestions/ai-draft', 'POST', { id });
     if (!res.ok) {
-      this.showToast(this.escape(res.error || 'AI could not write a draft.'));
+      // Shown on the card (not a toast) so there's time to read the reason
+      const card = btn && btn.closest('.task-card');
+      if (card) {
+        let note = card.querySelector('.ai-error');
+        if (!note) {
+          note = document.createElement('p');
+          note.className = 'ai-error';
+          card.appendChild(note);
+        }
+        note.textContent = res.error || 'AI could not write a draft.';
+      } else {
+        this.showToast(this.escape(res.error || 'AI could not write a draft.'));
+      }
       if (btn) {
         btn.disabled = false;
         btn.textContent = 'Ask AI';
