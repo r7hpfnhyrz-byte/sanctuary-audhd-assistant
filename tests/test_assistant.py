@@ -273,5 +273,67 @@ class TestAuDHDAssistant(unittest.TestCase):
         self.assertEqual(next(s for s in all_items if s["id"] == task["id"])["ai_draft"], "Dear team,\nHere is the plan.")
 
 
+    def test_12_ai_router_models_thinking_blocks_and_error_reasons(self) -> None:
+        import io
+        import json
+        import urllib.error
+        from unittest import mock
+
+        from backend.ai.router import DualAIRouter
+
+        router = DualAIRouter()
+        router.claude_key = "sk-test"
+        router.gemini_key = "gm-secret-key"
+        router.refresh_keys = lambda: None
+        seen_models = []
+
+        def http_error(url, code, message):
+            body = io.BytesIO(json.dumps({"error": {"message": message}}).encode())
+            return urllib.error.HTTPError(url, code, "err", {}, body)
+
+        class Resp(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        def fake_urlopen(req, timeout=0):
+            url = req.full_url
+            if "anthropic" in url:
+                model = json.loads(req.data)["model"]
+                seen_models.append(model)
+                if model != "claude-sonnet-5-5":
+                    raise http_error(url, 404, f"model: {model}")
+                # A thinking block arrives before the answer on current models
+                return Resp(json.dumps({
+                    "stop_reason": "end_turn",
+                    "content": [{"type": "thinking", "thinking": ""}, {"type": "text", "text": "Draft text"}],
+                }).encode())
+            raise http_error(url, 404, "models/gemini is not found")
+
+        with mock.patch("urllib.request.urlopen", fake_urlopen), \
+                mock.patch("backend.ai.router.Config.ANTHROPIC_MODEL", "claude-3-7-sonnet-latest"):
+            res = router.generate("hi", prefer="claude")
+        self.assertEqual(res["text"], "Draft text")
+        self.assertEqual(seen_models, ["claude-3-7-sonnet-latest", "claude-sonnet-5-5"])
+
+        # Bad Claude key and missing Gemini models: the reasons come back, the Gemini key never does
+        def all_fail(req, timeout=0):
+            if "anthropic" in req.full_url:
+                raise http_error(req.full_url, 401, "invalid x-api-key")
+            raise http_error(req.full_url, 404, "models/gemini-flash-latest is not found")
+
+        with mock.patch("urllib.request.urlopen", all_fail):
+            res = router.generate("hi", prefer="claude")
+        self.assertEqual(res["text"], "")
+        joined = " ".join(res["errors"])
+        self.assertIn("HTTP 401: invalid x-api-key", joined)
+        self.assertIn("HTTP 404", joined)
+        self.assertNotIn("gm-secret-key", joined)
+        # A bad key is not retried on every model
+        self.assertEqual(sum("Claude (" in e for e in res["errors"]), 1)
+
+
 if __name__ == "__main__":
     unittest.main()

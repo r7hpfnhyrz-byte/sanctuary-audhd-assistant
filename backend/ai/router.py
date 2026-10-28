@@ -27,23 +27,32 @@ class DualAIRouter:
     def __init__(self) -> None:
         self.gemini_key = os.environ.get("GEMINI_API_KEY", Config.GEMINI_API_KEY)
         self.claude_key = os.environ.get("ANTHROPIC_API_KEY", Config.ANTHROPIC_API_KEY)
+        self.last_errors: List[str] = []
 
     def refresh_keys(self) -> None:
         self.gemini_key = os.environ.get("GEMINI_API_KEY", Config.GEMINI_API_KEY)
         self.claude_key = os.environ.get("ANTHROPIC_API_KEY", Config.ANTHROPIC_API_KEY)
 
-    def call_claude(self, system_prompt: str, user_prompt: str, max_tokens: int = 900) -> Optional[str]:
+    @staticmethod
+    def _http_error_text(exc: urllib.error.HTTPError) -> str:
+        """'HTTP 404: model not found' from the provider's JSON error body (never includes the URL or key)."""
+        try:
+            body = json.loads(exc.read().decode("utf-8"))
+            err = body.get("error", {})
+            msg = err.get("message", "") if isinstance(err, dict) else str(err)
+        except Exception:
+            msg = ""
+        return f"HTTP {exc.code}: {msg or exc.reason}"
+
+    def call_claude(self, system_prompt: str, user_prompt: str, max_tokens: int = 2000) -> Optional[str]:
         """Call Anthropic Claude Messages API via standard HTTPS (supports x-api-key and Bearer tokens)."""
         self.refresh_keys()
         if not self.claude_key:
+            self.last_errors.append("Claude: no ANTHROPIC_API_KEY is set.")
             return None
         url = "https://api.anthropic.com/v1/messages"
-        models_to_try = [
-            Config.ANTHROPIC_MODEL,
-            "claude-sonnet-4-20250514",
-            "claude-3-7-sonnet-latest",
-            "claude-3-5-sonnet-latest",
-        ]
+        # Older IDs (claude-3-7-sonnet-latest, claude-sonnet-4-20250514) are retired and return 404
+        models_to_try = [Config.ANTHROPIC_MODEL, "claude-sonnet-5-5", "claude-opus-5-5"]
         seen = set()
         for model_name in models_to_try:
             if not model_name or model_name in seen:
@@ -54,18 +63,76 @@ class DualAIRouter:
                 "max_tokens": max_tokens,
                 "system": system_prompt,
                 "messages": [{"role": "user", "content": user_prompt}],
+                # Short drafting work: keep thinking light so replies come back quickly
+                "output_config": {"effort": "low"},
+                # If a safety classifier declines, let the API retry on its recommended model
+                "fallbacks": "default",
             }
-            for headers in (
-                {
-                    "Content-Type": "application/json",
-                    "x-api-key": self.claude_key,
-                    "anthropic-version": "2023-06-01",
-                },
-                {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.claude_key}",
-                    "anthropic-version": "2023-06-01",
-                },
+            base_headers = {
+                "Content-Type": "application/json",
+                "anthropic-version": "2023-06-01",
+                "anthropic-beta": "server-side-fallback-2026-07-01",
+            }
+            auth_failed = False
+            for auth in ({"x-api-key": self.claude_key}, {"Authorization": f"Bearer {self.claude_key}"}):
+                req = urllib.request.Request(
+                    url,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={**base_headers, **auth},
+                    method="POST",
+                )
+                try:
+                    with urllib.request.urlopen(req, timeout=60) as resp:
+                        data = json.loads(resp.read().decode("utf-8"))
+                except urllib.error.HTTPError as exc:
+                    auth_failed = exc.code in (401, 403)
+                    self.last_errors.append(f"Claude ({model_name}): {self._http_error_text(exc)}")
+                    if auth_failed:
+                        continue  # try the other auth header style
+                    break  # model-level problem: try the next model
+                except Exception as exc:
+                    self.last_errors.append(f"Claude ({model_name}): could not reach the API ({exc}).")
+                    break
+                auth_failed = False
+
+                if data.get("stop_reason") == "refusal":
+                    self.last_errors.append("Claude declined this request.")
+                    return None
+                # Newer models may put thinking blocks before the answer, so collect every text block
+                text = "".join(
+                    b.get("text", "") for b in data.get("content", []) if isinstance(b, dict) and b.get("type") == "text"
+                ).strip()
+                if text:
+                    return text
+                self.last_errors.append(f"Claude ({model_name}): returned no text.")
+                break
+            if auth_failed:
+                return None  # a bad key fails the same way on every model
+        return None
+
+    def call_gemini(self, system_prompt: str, user_prompt: str) -> Optional[str]:
+        """Call Google Gemini generateContent API via standard HTTPS (supports API key query param and Bearer token)."""
+        self.refresh_keys()
+        if not self.gemini_key:
+            self.last_errors.append("Gemini: no GEMINI_API_KEY is set.")
+            return None
+        payload = {
+            "systemInstruction": {"parts": [{"text": system_prompt}]},
+            "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
+            "generationConfig": {"temperature": 0.65, "maxOutputTokens": 2048},
+        }
+        # gemini-2.5-flash is being withdrawn; gemini-flash-latest tracks Google's current Flash model
+        models_to_try = [Config.GEMINI_MODEL, "gemini-flash-latest", "gemini-2.5-flash"]
+        seen = set()
+        for model in models_to_try:
+            if not model or model in seen:
+                continue
+            seen.add(model)
+            base = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+            auth_failed = False
+            for url, headers in (
+                (f"{base}?key={self.gemini_key}", {"Content-Type": "application/json"}),
+                (base, {"Content-Type": "application/json", "Authorization": f"Bearer {self.gemini_key}"}),
             ):
                 req = urllib.request.Request(
                     url,
@@ -74,56 +141,29 @@ class DualAIRouter:
                     method="POST",
                 )
                 try:
-                    with urllib.request.urlopen(req, timeout=20) as resp:
+                    with urllib.request.urlopen(req, timeout=60) as resp:
                         data = json.loads(resp.read().decode("utf-8"))
-                        content_blocks = data.get("content", [])
-                        if content_blocks and isinstance(content_blocks, list):
-                            return content_blocks[0].get("text")
-                except Exception:
-                    continue
-        return None
+                except urllib.error.HTTPError as exc:
+                    auth_failed = exc.code in (401, 403)
+                    self.last_errors.append(f"Gemini ({model}): {self._http_error_text(exc)}")
+                    if auth_failed:
+                        continue
+                    break
+                except Exception as exc:
+                    # Don't echo the exception text: urllib can include the URL, which carries the key
+                    self.last_errors.append(f"Gemini ({model}): could not reach the API ({type(exc).__name__}).")
+                    break
+                auth_failed = False
 
-    def call_gemini(self, system_prompt: str, user_prompt: str) -> Optional[str]:
-        """Call Google Gemini generateContent API via standard HTTPS (supports API key query param and Bearer token)."""
-        self.refresh_keys()
-        if not self.gemini_key:
-            return None
-        model = Config.GEMINI_MODEL
-        payload = {
-            "systemInstruction": {"parts": [{"text": system_prompt}]},
-            "contents": [{"role": "user", "parts": [{"text": user_prompt}]}],
-            "generationConfig": {"temperature": 0.65, "maxOutputTokens": 1000},
-        }
-        attempts = [
-            (
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={self.gemini_key}",
-                {"Content-Type": "application/json"},
-            ),
-            (
-                f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                {
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {self.gemini_key}",
-                },
-            ),
-        ]
-        for url, headers in attempts:
-            req = urllib.request.Request(
-                url,
-                data=json.dumps(payload).encode("utf-8"),
-                headers=headers,
-                method="POST",
-            )
-            try:
-                with urllib.request.urlopen(req, timeout=20) as resp:
-                    data = json.loads(resp.read().decode("utf-8"))
-                    candidates = data.get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        if parts:
-                            return parts[0].get("text")
-            except Exception:
-                continue
+                candidates = data.get("candidates", [])
+                parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
+                text = "".join(p.get("text", "") for p in parts if not p.get("thought")).strip()
+                if text:
+                    return text
+                self.last_errors.append(f"Gemini ({model}): returned no text.")
+                break
+            if auth_failed:
+                return None
         return None
 
     def generate(
@@ -131,24 +171,23 @@ class DualAIRouter:
         user_prompt: str,
         system_prompt: str = AUDHD_SYSTEM_PROMPT,
         prefer: str = "claude",
-    ) -> Dict[str, str]:
-        """Generate response using preferred model (Claude or Gemini) with automatic cross-fallback."""
-        if prefer == "claude":
-            text = self.call_claude(system_prompt, user_prompt)
-            if text:
-                return {"text": text, "provider": "Anthropic Claude"}
-            text = self.call_gemini(system_prompt, user_prompt)
-            if text:
-                return {"text": text, "provider": "Google Gemini"}
-        else:
-            text = self.call_gemini(system_prompt, user_prompt)
-            if text:
-                return {"text": text, "provider": "Google Gemini"}
-            text = self.call_claude(system_prompt, user_prompt)
-            if text:
-                return {"text": text, "provider": "Anthropic Claude"}
+    ) -> Dict[str, Any]:
+        """Generate response using preferred model (Claude or Gemini) with automatic cross-fallback.
 
-        return {"text": "", "provider": "Built-in AuDHD Neuro-Engine"}
+        On failure, 'errors' lists why each provider failed so callers can show it.
+        """
+        self.last_errors = []
+        order = (
+            [(self.call_claude, "Anthropic Claude"), (self.call_gemini, "Google Gemini")]
+            if prefer == "claude"
+            else [(self.call_gemini, "Google Gemini"), (self.call_claude, "Anthropic Claude")]
+        )
+        for call, provider in order:
+            text = call(system_prompt, user_prompt)
+            if text:
+                return {"text": text, "provider": provider, "errors": []}
+
+        return {"text": "", "provider": "Built-in AuDHD Neuro-Engine", "errors": list(dict.fromkeys(self.last_errors))}
 
     def coach_reply(
         self,

@@ -36,9 +36,9 @@ class Config:
 
     #Dual AI Engine Keys (Google Gemini + Anthropic Claude)
     GEMINI_API_KEY: str = os.environ.get("GEMINI_API_KEY", "")
-    GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+    GEMINI_MODEL: str = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
     ANTHROPIC_API_KEY: str = os.environ.get("ANTHROPIC_API_KEY", "")
-    ANTHROPIC_MODEL: str = os.environ.get("ANTHROPIC_MODEL", "claude-3-7-sonnet-latest")
+    ANTHROPIC_MODEL: str = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5-5")
 
     # Notion Integration Key
     NOTION_API_KEY: str = os.environ.get("NOTION_API_KEY", "")
