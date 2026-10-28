@@ -101,7 +101,9 @@ class TestAuDHDAssistant(unittest.TestCase):
         self.assertTrue(tone_res["ok"])
         self.assertIn("capacity", tone_res["draft_reply"].lower())
 
-        # Approve & Send email
+        # Seed accounts have no OAuth token, so a real send is impossible: it must be refused,
+        # not simulated, and the email must stay pending
+        self.assertFalse(target_email["can_send"])
         status, send_res = self.app.handle_api(
             "POST",
             "/api/emails/send",
@@ -113,7 +115,19 @@ class TestAuDHDAssistant(unittest.TestCase):
             },
         )
         self.assertEqual(status, 200)
-        self.assertTrue(send_res["ok"])
+        self.assertFalse(send_res["ok"])
+        self.assertIn("isn't set up", send_res["error"])
+        _, data = self.app.handle_api("GET", "/api/emails", {}, {})
+        self.assertIn(target_email["id"], [e["id"] for e in data["emails"]])
+
+        # Marking it done (after replying elsewhere) still works
+        status, done_res = self.app.handle_api(
+            "POST",
+            "/api/emails/send",
+            {},
+            {"id": target_email["id"], "draft_reply": tone_res["draft_reply"], "action": "draft"},
+        )
+        self.assertTrue(done_res["ok"])
 
     def test_06_shiny_object_idea_sandbox_and_dossier(self) -> None:
         status, res = self.app.handle_api(

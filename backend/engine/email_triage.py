@@ -31,8 +31,16 @@ class EmailTriageEngine:
                 ORDER BY CASE urgency WHEN 'action_required' THEN 1 ELSE 2 END, id ASC
                 """
             ).fetchall()
+            # Real sending needs an OAuth access token; app-password (IMAP) accounts can only read
+            sendable_accounts = {
+                r["id"]
+                for r in conn.execute("SELECT id, credentials_json FROM connected_accounts").fetchall()
+                if json.loads(r["credentials_json"] or "{}").get("access_token")
+            }
 
         emails = [dict(r) for r in rows]
+        for e in emails:
+            e["can_send"] = (e.get("account_id") or 1) in sendable_accounts
         if energy_mode == "low_spoons":
             action_only = [e for e in emails if e["urgency"] == "action_required"]
             return action_only[:2] if action_only else emails[:1]
@@ -91,6 +99,13 @@ class EmailTriageEngine:
 
             body_to_send = edited_body.strip() or email["draft_reply"]
             send_now = action == "send"
+
+            if send_now and not creds.get("access_token"):
+                # Without OAuth the connectors only simulate a send. Never mark an email "sent" that wasn't.
+                return {
+                    "ok": False,
+                    "error": "Sending isn't set up for this account. Copy the reply and send it from your email app.",
+                }
 
             if email["provider"] == "google":
                 dispatch_result = GoogleWorkspaceConnector.send_or_draft_gmail(

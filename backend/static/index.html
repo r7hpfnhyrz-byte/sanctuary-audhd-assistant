@@ -155,168 +155,111 @@
     </main>
 
     <!-- =====================================================================
-         VIEW 2: MULTI-INBOX EMAIL TRIAGE & PROACTIVE DRAFT STUDIO
+         VIEW 2: INBOX (triaged emails with drafted replies)
          ===================================================================== -->
     <main id="tab-inbox" class="tab-view">
-      <section class="section-intro-card">
-        <div>
-          <div class="coach-eyebrow">ZERO BLANK-PAGE PARALYSIS • GMAIL &amp; EMPLOYER-SAFE OUTLOOK STUDIO</div>
-          <h2 class="section-title">Proactive Email Triage &amp; Draft Studio</h2>
-          <p class="section-subtitle" style="margin-bottom:14px;">
-            Your connected Gmail inboxes triage automatically. And for <strong>employer-locked Outlook emails</strong> (where IT blocks external APIs), paste any tricky email below—Claude &amp; Gemini will summarize what they actually want in 1 calm sentence and draft your reply immediately!
-          </p>
-          <form class="sandbox-form" onsubmit="App.submitCustomEmailTriage(event)" style="margin-top:8px;">
-            <div class="sandbox-input-row">
-              <input type="text" id="custom-email-sender" class="input-clean" placeholder="Sender name (e.g. 'Sarah / DfE Line Manager')" />
-              <input type="text" id="custom-email-subject" class="input-clean" placeholder="Subject / Topic" />
-            </div>
-            <textarea
-              id="custom-email-body"
-              class="textarea-clean"
-              rows="2"
-              placeholder="Paste any work email thread here that you are avoiding or need a fast, well-worded reply for..."
-              required
-            ></textarea>
-            <div class="sandbox-submit-row">
-              <span class="sandbox-hint">🔒 100% IT-Policy Safe — no employer OAuth login required.</span>
-              <button type="submit" class="btn-primary" id="custom-email-btn">
-                ⚡ Summarize &amp; Draft Reply For Me
-              </button>
-            </div>
-          </form>
-        </div>
-      </section>
+      <div class="tab-intro">
+        <h2 class="section-title">Inbox</h2>
+        <p class="tab-intro-text">Emails that need you, each with a reply already drafted.</p>
+      </div>
 
-      <div id="triage-email-list" class="email-studio-stack"></div>
-    </main>
+      <div id="triage-email-list" class="card-stack"></div>
 
-    <!-- =====================================================================
-         VIEW 3: THE "SHINY OBJECT" IDEA SANDBOX & AUTONOMOUS INCUBATOR
-         ===================================================================== -->
-    <main id="tab-sandbox" class="tab-view">
-      <section class="sandbox-capture-hero">
-        <div class="sandbox-hero-header">
-          <div>
-            <div class="coach-eyebrow">PREVENT SIDE-QUEST HIJACKING</div>
-            <h2 class="section-title">The "Shiny Object" Idea Sandbox &amp; Incubator</h2>
-            <p class="section-subtitle">
-              When a weird and wonderful idea strikes mid-day, don't let it derail your actual priorities—and don't lose the magic either! Park it here in 10 seconds, while your background AI agent (Gemini + Claude) researches feasibility, stress-tests it, and writes a full Concept Dossier for your weekend curiosity window.
-            </p>
-          </div>
-        </div>
-
-        <form class="sandbox-form" onsubmit="App.submitIdea(event)">
+      <details class="tool-panel">
+        <summary>Get a reply drafted for an email from another account</summary>
+        <p class="tool-panel-note">
+          Paste an email Sanctuary can't see. The text goes to Claude or Gemini to summarise it and draft a reply,
+          so check your employer's rules before pasting work emails.
+        </p>
+        <form class="stack-form" onsubmit="App.submitCustomEmailTriage(event)">
           <div class="sandbox-input-row">
-            <input
-              type="text"
-              id="idea-title-input"
-              class="input-clean"
-              placeholder="Name your weird &amp; wonderful idea (e.g. 'Gamified peer supervision swap platform')..."
-              required
-            />
-            <select id="idea-category-input" class="select-clean">
-              <option value="Wild Spark">✨ Wild Spark</option>
-              <option value="Spire / Clinical Innovation">🌱 Spire / Therapy Innovation</option>
-              <option value="Selrok / Tech Venture">🚀 Selrok / Tech Concept</option>
-              <option value="Property / Investment">🏡 Property / Income Idea</option>
-            </select>
+            <input type="text" id="custom-email-sender" class="input-clean" placeholder="Who it's from" />
+            <input type="text" id="custom-email-subject" class="input-clean" placeholder="Subject" />
           </div>
-          <textarea
-            id="idea-spark-input"
-            class="textarea-clean"
-            rows="2"
-            placeholder="Brain-dump the raw thought in 1–2 messy sentences — the AI Incubator Agent will do all the research and structuring for you..."
-          ></textarea>
-          <div class="sandbox-submit-row">
-            <span class="sandbox-hint">🛡️ Parking an idea keeps it 100% off your daily To-Do list while developing it in Notion &amp; your Sandbox.</span>
-            <button type="submit" class="btn-primary" id="idea-submit-btn">
-              🧪 Park Idea &amp; Dispatch AI Agent
-            </button>
+          <textarea id="custom-email-body" class="textarea-clean" rows="3" placeholder="Paste the email here" required></textarea>
+          <div class="form-submit-row">
+            <button type="submit" class="btn-primary" id="custom-email-btn">Draft a reply</button>
           </div>
         </form>
-      </section>
-
-      <section class="sandbox-gallery-section">
-        <h3 class="column-heading">Incubated Idea Dossiers (Researched Autonomously For You)</h3>
-        <div id="idea-dossier-list" class="dossier-grid"></div>
-      </section>
+      </details>
     </main>
 
     <!-- =====================================================================
-         VIEW 4: EXPERT AuDHD COACH, MICRO-STEP BREAKER & BODY-DOUBLING TIMER
+         VIEW 3: IDEAS (park new ideas so they don't take over today)
+         ===================================================================== -->
+    <main id="tab-sandbox" class="tab-view">
+      <div class="tab-intro">
+        <h2 class="section-title">Ideas</h2>
+        <p class="tab-intro-text">Park a new idea here so it doesn't take over today. AI looks into it for later.</p>
+      </div>
+
+      <form class="tool-card stack-form" onsubmit="App.submitIdea(event)">
+        <div class="sandbox-input-row">
+          <input type="text" id="idea-title-input" class="input-clean" placeholder="The idea, in a few words" required />
+          <select id="idea-category-input" class="select-clean">
+            <option value="Wild Spark">Just an idea</option>
+            <option value="Spire / Clinical Innovation">Spire / therapy</option>
+            <option value="Selrok / Tech Venture">Selrok / tech</option>
+            <option value="Property / Investment">Property / income</option>
+          </select>
+        </div>
+        <textarea id="idea-spark-input" class="textarea-clean" rows="2" placeholder="Optional: a sentence or two about it"></textarea>
+        <div class="form-submit-row">
+          <button type="submit" class="btn-primary" id="idea-submit-btn">Park idea</button>
+        </div>
+      </form>
+
+      <h3 class="column-heading column-heading-spaced">Parked ideas</h3>
+      <div id="idea-dossier-list" class="card-stack"></div>
+    </main>
+
+    <!-- =====================================================================
+         VIEW 4: COACH (chat, focus timer, task breaker)
          ===================================================================== -->
     <main id="tab-coach" class="tab-view">
+      <div class="tab-intro">
+        <h2 class="section-title">Coach</h2>
+        <p class="tab-intro-text">Talk through a block, time a focus sprint, or break a task down.</p>
+      </div>
+
       <div class="coach-workspace-grid">
-        <!-- Left: Interactive AuDHD Coach Chat -->
         <section class="coach-chat-card">
-          <div class="coach-chat-header">
-            <div>
-              <div class="coach-eyebrow">NEURO-AFFIRMING EXECUTIVE FUNCTION COACH (CLAUDE + GEMINI)</div>
-              <h2 class="section-title">AuDHD Coaching Studio</h2>
-            </div>
-            <div class="quick-prompt-pills">
-              <button class="chip-btn" onclick="App.sendQuickCoach('I am frozen in task paralysis right now. Help me start gently.')">
-                🧊 Stuck in paralysis
-              </button>
-              <button class="chip-btn" onclick="App.sendQuickCoach('I feel overwhelmed by everything on my plate today. Help me strip it back.')">
-                🌊 Feeling overwhelmed
-              </button>
-              <button class="chip-btn" onclick="App.sendQuickCoach('I have a weird new idea and I am tempted to abandon my schedule to research it.')">
-                ✨ Shiny object temptation
-              </button>
-            </div>
+          <div class="quick-prompt-pills">
+            <button class="chip-btn" onclick="App.sendQuickCoach('I am frozen in task paralysis right now. Help me start gently.')">I'm stuck</button>
+            <button class="chip-btn" onclick="App.sendQuickCoach('I feel overwhelmed by everything on my plate today. Help me strip it back.')">I'm overwhelmed</button>
+            <button class="chip-btn" onclick="App.sendQuickCoach('I have a weird new idea and I am tempted to abandon my schedule to research it.')">A new idea is distracting me</button>
           </div>
 
           <div id="coach-messages-box" class="coach-messages-box"></div>
 
           <form class="coach-input-bar" onsubmit="App.submitCoachMessage(event)">
-            <input
-              type="text"
-              id="coach-input"
-              class="input-clean"
-              placeholder="Tell your coach how your brain is feeling, ask to rescope your afternoon, or talk through a block..."
-            />
-            <button type="submit" class="btn-primary">Ask Coach</button>
+            <input type="text" id="coach-input" class="input-clean" placeholder="What's going on?" />
+            <button type="submit" class="btn-primary">Send</button>
           </form>
         </section>
 
-        <!-- Right: Body-Doubling Focus Sprint Timer + Instant Micro-Step Decomposer -->
         <aside class="coach-tools-column">
-          <!-- Tool 1: Visual Body-Doubling Timer -->
           <div class="tool-card">
-            <div class="coach-eyebrow">TIME-BLINDNESS ANCHOR • BODY DOUBLING</div>
-            <h3 class="tool-card-title">⏱️ Gentle Focus Sprint Timer</h3>
-            <p class="tool-card-desc">
-              AuDHD brains work best with short, bounded sprints where you have explicit permission to stop when the chime rings.
-            </p>
+            <h3 class="tool-card-title">Focus timer</h3>
+            <p class="tool-card-desc">Work until it chimes. Then you're allowed to stop.</p>
             <div class="timer-display" id="focus-timer-display">15:00</div>
             <div class="timer-presets">
-              <button class="chip-btn" onclick="App.setTimerMinutes(5)">5m Micro-Start</button>
-              <button class="chip-btn active" onclick="App.setTimerMinutes(15)">15m Sprint</button>
-              <button class="chip-btn" onclick="App.setTimerMinutes(25)">25m Deep Wave</button>
+              <button class="chip-btn" data-mins="5" onclick="App.setTimerMinutes(5)">5 min</button>
+              <button class="chip-btn active" data-mins="15" onclick="App.setTimerMinutes(15)">15 min</button>
+              <button class="chip-btn" data-mins="25" onclick="App.setTimerMinutes(25)">25 min</button>
             </div>
             <div class="timer-controls">
-              <button class="btn-primary" id="timer-start-btn" onclick="App.toggleTimer()">▶ Start Body-Doubling Sprint</button>
+              <button class="btn-primary" id="timer-start-btn" onclick="App.toggleTimer()">Start</button>
               <button class="btn-ghost" onclick="App.resetTimer()">Reset</button>
             </div>
           </div>
 
-          <!-- Tool 2: 1-Click Task Decomposer -->
           <div class="tool-card">
-            <div class="coach-eyebrow">EXECUTIVE DYSFUNCTION BREAKER</div>
-            <h3 class="tool-card-title">🔨 Shrink Any Daunting Task</h3>
-            <p class="tool-card-desc">
-              Paste anything you're avoiding and I'll break it into 4 tiny steps—starting with a 60-second zero-friction move.
-            </p>
+            <h3 class="tool-card-title">Break a task down</h3>
+            <p class="tool-card-desc">Type something you're avoiding. You'll get 4 small steps.</p>
             <form onsubmit="App.breakDownCustomTask(event)" class="micro-breaker-form">
-              <input
-                type="text"
-                id="custom-task-input"
-                class="input-clean"
-                placeholder="e.g. 'Prepare UnLtd grant budget spreadsheet'"
-                required
-              />
-              <button type="submit" class="btn-secondary">Break Into 60s Steps</button>
+              <input type="text" id="custom-task-input" class="input-clean" placeholder="e.g. Write the grant budget" required />
+              <button type="submit" class="btn-secondary">Break it down</button>
             </form>
             <ol id="custom-micro-steps-list" class="micro-steps-list"></ol>
           </div>
@@ -325,56 +268,33 @@
     </main>
 
     <!-- =====================================================================
-         VIEW 5: ACCOMPLISHMENT & CLEARED VAULT (DAY / WEEK / MONTH / YEAR)
+         VIEW 5: DONE (what's been finished, by time window)
          ===================================================================== -->
     <main id="tab-vault" class="tab-view">
-      <section class="vault-hero-card">
-        <div class="vault-hero-top">
-          <div>
-            <div class="coach-eyebrow">CURE FOR ADHD "PRODUCTIVITY AMNESIA" • SYNCED TO NOTION</div>
-            <h2 class="section-title">The Accomplishment &amp; Cleared Vault</h2>
-            <p class="section-subtitle" id="vault-celebration-summary">
-              Loading your historical wins across Day, Week, Month, and Year...
-            </p>
-          </div>
-          <div class="vault-actions-cluster">
-            <button class="btn-secondary" onclick="App.syncVaultToNotion()">
-              📓 Sync Briefing &amp; Vault to Notion Now
-            </button>
-          </div>
+      <div class="tab-intro">
+        <h2 class="section-title">Done</h2>
+        <p class="tab-intro-text" id="vault-celebration-summary"></p>
+      </div>
+
+      <div class="section-header-bar">
+        <div class="horizon-pills" role="tablist">
+          <button class="horizon-pill" data-vault-window="day" onclick="App.loadVault('day')">
+            Today <span class="pill-count" id="v-count-day">0</span>
+          </button>
+          <button class="horizon-pill active" data-vault-window="week" onclick="App.loadVault('week')">
+            This week <span class="pill-count" id="v-count-week">0</span>
+          </button>
+          <button class="horizon-pill" data-vault-window="month" onclick="App.loadVault('month')">
+            This month <span class="pill-count" id="v-count-month">0</span>
+          </button>
+          <button class="horizon-pill" data-vault-window="year" onclick="App.loadVault('year')">
+            This year <span class="pill-count" id="v-count-year">0</span>
+          </button>
         </div>
+        <button class="btn-secondary btn-sm" onclick="App.syncVaultToNotion()" title="Copy this list into your Notion workspace">Save to Notion</button>
+      </div>
 
-        <!-- Lookback Time Window Filter (Day / Week / Month / Year) -->
-        <div class="vault-filter-bar">
-          <div class="horizon-pills" role="tablist">
-            <button class="horizon-pill" data-vault-window="day" onclick="App.loadVault('day')">
-              Today (24h) <span class="pill-count" id="v-count-day">0</span>
-            </button>
-            <button class="horizon-pill active" data-vault-window="week" onclick="App.loadVault('week')">
-              This Week (7d) <span class="pill-count" id="v-count-week">0</span>
-            </button>
-            <button class="horizon-pill" data-vault-window="month" onclick="App.loadVault('month')">
-              This Month (30d) <span class="pill-count" id="v-count-month">0</span>
-            </button>
-            <button class="horizon-pill" data-vault-window="year" onclick="App.loadVault('year')">
-              This Year (365d) <span class="pill-count" id="v-count-year">0</span>
-            </button>
-          </div>
-
-          <div class="vault-kpi-strip">
-            <div class="kpi-pill">✉️ <strong id="vault-kpi-emails">0</strong> Emails Handled</div>
-            <div class="kpi-pill">🛡️ <strong id="vault-kpi-ideas">0</strong> Ideas Parked</div>
-          </div>
-        </div>
-
-        <!-- Unlocked Trophy Badges -->
-        <div id="vault-badges-row" class="badges-strip"></div>
-      </section>
-
-      <section class="vault-timeline-section">
-        <h3 class="column-heading" id="vault-list-heading">Cleared Items &amp; Wins Archive (Click Any Item to Re-Open Its File/Doc)</h3>
-        <div id="vault-items-list" class="card-stack"></div>
-      </section>
+      <div id="vault-items-list" class="card-stack"></div>
     </main>
   </div>
 
