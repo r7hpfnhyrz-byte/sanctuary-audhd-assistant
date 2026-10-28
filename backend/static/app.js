@@ -156,7 +156,9 @@ const App = {
     });
 
     if (progress.last_reward) {
-      const reason = String(progress.last_reward.reason || '').replace(
+      const reason = String(progress.last_reward.reason || '')
+        .replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, '')
+        .replace(
         /^(Cleared: |Next thing done: )(.*)$/,
         (_, prefix, title) => `Done: ${this.splitTitle(title).title}`
       );
@@ -213,11 +215,17 @@ const App = {
     const doBtn = document.getElementById('roulette-do-btn');
     // Labels from the backend still mention XP ("& Claim +15 XP", "(+35 XP)"); strip that out
     const label = (spin.button_label || 'Do it').replace(/\s*(&\s*)?(Claim\s*)?\(?\+\d+\s*XP\)?/gi, '').trim();
-    doBtn.textContent = label || 'Do it';
+    doBtn.textContent = spin.type === 'email' ? 'Open the reply' : label || 'Do it';
     doBtn.onclick = async () => {
       banner.classList.add('hidden');
       if (spin.type === 'email' && spin.id) {
-        await this.sendEmailDraft(spin.id, 'send', spin.draft_reply);
+        // Take them to the drafted reply rather than sending on their behalf
+        this.switchTab('inbox');
+        const reply = document.querySelector(`[data-reply-id="${spin.id}"]`);
+        if (reply) {
+          reply.open = true;
+          reply.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
       } else if (spin.type === 'suggestion' && spin.id) {
         await this.launchAndCompleteSuggestion(spin.id, false, true);
       } else {
@@ -627,88 +635,81 @@ const App = {
   renderEmails() {
     const container = document.getElementById('triage-email-list');
     if (this.state.emails.length === 0) {
-      container.innerHTML = `
-        <div class="clean-card">
-          <h3 class="card-title">🎉 Inbox Triage Zero!</h3>
-          <p class="card-desc" style="margin:0;">Every actionable email across your Gmail and Outlook accounts has been handled and logged in your Accomplishment Vault.</p>
-        </div>`;
+      container.innerHTML = `<p class="empty-note">Nothing waiting. You're clear.</p>`;
       return;
     }
 
-    container.innerHTML = this.state.emails
-      .map(
-        (e) => `
-        <article class="email-studio-card" id="email-card-${e.id}">
-          <!-- Left: Low-Cognitive-Load Triage Brief + Direct File/Inbox Links -->
-          <div>
-            <div class="card-meta-row">
-              <span class="urgency-pill ${e.urgency}">
-                ${e.urgency === 'action_required' ? '🔴 Needs Reply Today' : '🟡 Quick Confirmation'}
-              </span>
-              <span class="source-tag">${this.escape(e.account_label)}</span>
-            </div>
-            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;">
-              ${
-                e.attachment_label
-                  ? `<button class="target-link-pill" onclick="App.openDirectTarget('${this.escapeAttr(e.local_file_path)}', '${this.escapeAttr(e.target_url)}', '${this.escapeAttr(e.attachment_label)}')">
-                       ${this.escape(e.attachment_label)} ↗
-                     </button>`
-                  : ''
-              }
-              <button class="target-link-pill" onclick="App.openDirectTarget('', '${this.escapeAttr(e.target_url)}', 'Original Thread')">
-                📬 Open Thread in ${e.provider === 'google' ? 'Gmail' : 'Outlook'} ↗
-              </button>
-            </div>
-            <h3 class="card-title clickable-title" onclick="App.openDirectTarget('${this.escapeAttr(e.local_file_path)}', '${this.escapeAttr(e.target_url)}', '${this.escapeAttr(e.subject)}')">
-              ${this.escape(e.subject)} ↗
-            </h3>
-            <p class="source-tag" style="margin-bottom:10px;">From: <strong>${this.escape(e.sender_name)}</strong> (${this.escape(e.sender_email)}) • ${this.escape(e.received_at)}</p>
-
-            <div class="micro-starter-callout">
-              <strong>1-Sentence Summary:</strong><br/>
-              ${this.escape(e.one_line_brief)}
-            </div>
-            <p class="card-desc"><strong>Suggested Action:</strong> ${this.escape(e.what_they_need)}</p>
-          </div>
-
-          <!-- Right: Proactive Editable Draft + 1-Click Tone Shifters & Direct Send -->
-          <div>
-            <div class="tone-bar">
-              <span class="source-tag">Shift Tone:</span>
-              <button class="chip-btn" onclick="App.shiftEmailTone(${e.id}, 'shorter')">⚡ Shorter</button>
-              <button class="chip-btn" onclick="App.shiftEmailTone(${e.id}, 'warmer')">💛 Warmer</button>
-              <button class="chip-btn" onclick="App.shiftEmailTone(${e.id}, 'polite_boundary')">🛡️ Polite Boundary / Next Week</button>
-            </div>
-            <textarea
-              id="draft-box-${e.id}"
-              class="textarea-clean"
-              rows="6"
-              style="margin-bottom:10px;"
-            >${this.escape(e.draft_reply)}</textarea>
-            <div class="card-actions-row">
-              <button class="btn-primary" onclick="App.sendEmailDraft(${e.id}, 'send')">
-                ✉️ Approve &amp; Send Here
-              </button>
-              <button class="btn-secondary" onclick="App.copyAndCompleteEmail(${e.id}, ${e.xp_reward})">
-                📋 Copy Reply to Clipboard &amp; Complete
-              </button>
-              <button class="btn-ghost" onclick="App.sendEmailDraft(${e.id}, 'draft')">
-                📥 Clear to Vault
-              </button>
-            </div>
-          </div>
-        </article>`
-      )
-      .join('');
+    container.innerHTML = this.state.emails.map((e) => this.renderEmailCard(e)).join('');
   },
 
-  async copyAndCompleteEmail(emailId, xpReward) {
+  // Older triage text carries XP labels like "(+25 XP)"; drop them
+  stripXP(text) {
+    return String(text || '').replace(/\s*\(\+\d+\s*XP\)/gi, '');
+  },
+
+  renderEmailCard(e) {
+    const needsReply = e.urgency === 'action_required';
+    const app = e.provider === 'google' ? 'Gmail' : 'Outlook';
+    const meta = [`From ${this.escape(e.sender_name)}`, this.escape(e.account_label)];
+    if (e.received_at) meta.push(this.formatTimeRange(e.received_at, ''));
+    return `
+      <article class="task-card ${needsReply ? 'u-urgent' : 'u-later'}" id="email-card-${e.id}">
+        <div class="task-main">
+          <h4 class="card-title clickable-title" onclick="App.openDirectTarget('', '${this.escapeAttr(e.target_url)}', 'Email')" title="Open in ${app}">
+            ${this.escape(e.subject)}
+          </h4>
+          <div class="card-labels">
+            <span class="urgency-label ${needsReply ? 'u-urgent' : 'u-later'}">${needsReply ? 'Needs a reply' : 'Can wait'}</span>
+            ${
+              e.attachment_label
+                ? `<button class="who-chip" onclick="App.openDirectTarget('${this.escapeAttr(e.local_file_path)}', '${this.escapeAttr(e.target_url)}', 'Attachment')">📎 ${this.escape(this.stripXP(e.attachment_label).replace(/^\W+/, ''))}</button>`
+                : ''
+            }
+          </div>
+          <div class="card-meta">${meta.join(' · ')}</div>
+          ${e.one_line_brief ? `<p class="card-summary">${this.escape(e.one_line_brief)}</p>` : ''}
+        </div>
+        <div class="task-actions">
+          <button class="btn-secondary btn-sm" onclick="App.openDirectTarget('', '${this.escapeAttr(e.target_url)}', 'Email')">Open</button>
+          <button class="btn-primary btn-sm" onclick="App.sendEmailDraft(${e.id}, 'draft')" title="Mark as handled">Done</button>
+        </div>
+        <details class="card-more" data-reply-id="${e.id}">
+          <summary>Reply (draft ready)</summary>
+          ${e.what_they_need ? `<p><strong>What they need:</strong> ${this.escape(this.stripXP(e.what_they_need))}</p>` : ''}
+          <div class="tone-bar">
+            <span class="card-meta">Make it:</span>
+            <button class="chip-btn" onclick="App.shiftEmailTone(${e.id}, 'shorter')">Shorter</button>
+            <button class="chip-btn" onclick="App.shiftEmailTone(${e.id}, 'warmer')">Warmer</button>
+            <button class="chip-btn" onclick="App.shiftEmailTone(${e.id}, 'polite_boundary')">Push to next week</button>
+          </div>
+          <textarea id="draft-box-${e.id}" class="textarea-clean" rows="7">${this.escape(e.draft_reply)}</textarea>
+          <div class="card-actions-row">
+            ${
+              e.can_send
+                ? `<button class="btn-primary btn-sm" onclick="App.sendEmailDraft(${e.id}, 'send')">Send</button>
+                   <button class="btn-secondary btn-sm" onclick="App.copyAndCompleteEmail(${e.id})">Copy reply</button>`
+                : `<button class="btn-primary btn-sm" onclick="App.copyAndCompleteEmail(${e.id})" title="Copies the reply and opens the email so you can paste and send it">Copy reply and open ${app}</button>`
+            }
+          </div>
+        </details>
+      </article>`;
+  },
+
+  // Copy the draft, open the thread to paste it, and mark the email handled
+  async copyAndCompleteEmail(emailId) {
     const box = document.getElementById(`draft-box-${emailId}`);
     const bodyText = box ? box.value : '';
+    const email = this.state.emails.find((x) => x.id === emailId);
     try {
       await navigator.clipboard.writeText(bodyText);
-      this.showToast('📋 Reply copied to your clipboard! Just paste into Outlook/Gmail.');
-    } catch (_) {}
+      this.showToast('Reply copied. Paste it into the email and send.');
+    } catch (_) {
+      this.showToast('Could not copy. Select the reply text and copy it by hand.');
+      return;
+    }
+    if (email && email.target_url && email.target_url.startsWith('http')) {
+      window.open(email.target_url, '_blank', 'noopener');
+    }
     await this.sendEmailDraft(emailId, 'draft', bodyText);
   },
 
@@ -721,32 +722,32 @@ const App = {
     if (!raw_email_text) return;
 
     btn.disabled = true;
-    btn.textContent = '🧠 Summarizing & Drafting Reply in Your Voice...';
+    btn.textContent = 'Drafting...';
     const res = await this.api('/api/emails/triage-custom', 'POST', {
       sender_name: sender,
       subject,
       raw_email_text,
     });
     btn.disabled = false;
-    btn.textContent = '⚡ Summarize & Draft Reply For Me';
+    btn.textContent = 'Draft a reply';
 
     if (res.ok) {
       document.getElementById('custom-email-sender').value = '';
       document.getElementById('custom-email-subject').value = '';
       document.getElementById('custom-email-body').value = '';
       this.playChime(false);
-      this.showToast('✨ Email triaged & reply drafted below!');
+      this.showToast('Reply drafted. It is at the top of your Inbox.');
       await this.loadEmails();
     }
   },
 
   async shiftEmailTone(emailId, tone) {
-    this.showToast(`✨ Shifting draft tone to "${tone.replace('_', ' ')}"...`);
+    this.showToast('Rewriting the draft...');
     const res = await this.api('/api/emails/tone', 'POST', { id: emailId, tone });
     if (res.ok) {
       const box = document.getElementById(`draft-box-${emailId}`);
       if (box) box.value = res.draft_reply;
-      this.showToast('✓ Draft updated! Feel free to tweak before sending.');
+      this.showToast('Draft updated. Check it before sending.');
     }
   },
 
@@ -758,13 +759,15 @@ const App = {
       draft_reply: bodyText,
       action,
     });
-    if (res.ok) {
-      this.playChime(false);
-      this.updateHUD(res.progress);
-      await this.loadEmails();
-      await this.loadBriefing();
-      await this.loadVault(this.state.selectedVaultWindow);
+    if (!res.ok) {
+      this.showToast(this.escape(res.error || 'That did not work.'));
+      return;
     }
+    this.playChime(false);
+    this.updateHUD(res.progress);
+    await this.loadEmails();
+    await this.loadBriefing();
+    await this.loadVault(this.state.selectedVaultWindow);
   },
 
   /* ------------------------------------------------------------------------
@@ -779,48 +782,35 @@ const App = {
   renderIdeas() {
     const container = document.getElementById('idea-dossier-list');
     if (this.state.ideas.length === 0) {
-      container.innerHTML = `<div class="clean-card"><p class="card-desc">No ideas parked yet. Drop your next wild spark above!</p></div>`;
+      container.innerHTML = `<p class="empty-note">No ideas parked yet.</p>`;
       return;
     }
 
     container.innerHTML = this.state.ideas
       .map((item) => {
         const d = item.dossier || {};
-        const experiments = (d.micro_experiments || [])
-          .map((ex) => `<li>${this.escape(ex)}</li>`)
-          .join('');
+        const experiments = (d.micro_experiments || []).map((ex) => `<li>${this.escape(ex)}</li>`).join('');
+        const verdict = String(d.priority_guardrail || '').replace(/^\W+/, '');
+        const meta = [this.escape(item.category)];
+        if (item.viability_score) meta.push(`Viability ${item.viability_score}/100`);
         return `
-          <article class="dossier-card">
-            <div class="card-meta-row">
-              <span class="source-tag">${this.escape(item.category)} • ${this.escape(item.effort_estimate)}</span>
-              <span class="dossier-score-pill">Viability ${item.viability_score}/100</span>
+          <article class="task-card">
+            <div class="task-main">
+              <h4 class="card-title">${this.escape(item.title)}</h4>
+              <div class="card-meta">${meta.join(' · ')}</div>
+              ${verdict ? `<p class="card-summary"><strong>Verdict:</strong> ${this.escape(verdict)}</p>` : ''}
             </div>
-            <div>
-              <button class="target-link-pill" onclick="App.openDirectTarget('', '${this.escapeAttr(item.notion_url || 'https://www.notion.so')}', 'Notion Idea Incubator')">
-                📓 Open Dossier in Notion Incubator ↗
-              </button>
+            <div class="task-actions">
+              <button class="btn-secondary btn-sm" onclick="App.openDirectTarget('', '${this.escapeAttr(item.notion_url || 'https://www.notion.so')}', 'Notion')">Open in Notion</button>
             </div>
-            <h4 class="card-title">💡 ${this.escape(item.title)}</h4>
-            <p class="card-desc"><em>"${this.escape(item.raw_spark)}"</em></p>
-
-            <div class="guardrail-box">
-              <strong>🛡️ Priority Guardrail (${this.escape(item.distraction_risk)}):</strong><br/>
-              ${this.escape(d.priority_guardrail || 'Parked safely so your today priorities stay protected.')}
-            </div>
-
-            <p class="card-desc"><strong>Autonomous Agent Thesis:</strong> ${this.escape(d.core_thesis || '')}</p>
-            <p class="card-desc"><strong>Why It Excites Your Brain:</strong> ${this.escape(d.why_its_exciting || '')}</p>
-            <p class="card-desc"><strong>Devil's Advocate Reality Check:</strong> ${this.escape(d.reality_check || '')}</p>
-
-            ${
-              experiments
-                ? `<div style="margin-top:8px;">
-                     <strong style="font-size:0.78rem; color:var(--text-muted);">NEXT 3 ZERO-COMMITMENT MICRO-EXPERIMENTS (FOR FREE TIME):</strong>
-                     <ol class="micro-steps-list">${experiments}</ol>
-                   </div>`
-                : ''
-            }
-            <div class="source-tag" style="margin-top:8px;">🤖 ${this.escape(d.researched_by || 'Researched by Gemini + Claude Sandbox Agent')} • Synced to Notion Incubator</div>
+            <details class="card-more">
+              <summary>More</summary>
+              ${item.raw_spark ? `<p><em>"${this.escape(item.raw_spark)}"</em></p>` : ''}
+              ${d.core_thesis ? `<p><strong>The idea:</strong> ${this.escape(d.core_thesis)}</p>` : ''}
+              ${d.why_its_exciting ? `<p><strong>Why it appeals:</strong> ${this.escape(d.why_its_exciting)}</p>` : ''}
+              ${d.reality_check ? `<p><strong>Reality check:</strong> ${this.escape(d.reality_check)}</p>` : ''}
+              ${experiments ? `<p><strong>Small things to try later:</strong></p><ol class="micro-steps-list">${experiments}</ol>` : ''}
+            </details>
           </article>
         `;
       })
@@ -840,17 +830,17 @@ const App = {
     if (!title) return;
 
     btn.disabled = true;
-    btn.textContent = '🤖 Parking Idea & Running AI Incubator Research...';
+    btn.textContent = 'Parking and researching...';
 
     const res = await this.api('/api/ideas', 'POST', { title, raw_spark, category });
     btn.disabled = false;
-    btn.textContent = '🧪 Park Idea & Dispatch AI Agent';
+    btn.textContent = 'Park idea';
 
     if (res.ok) {
       titleEl.value = '';
       sparkEl.value = '';
-      this.playChime(true);
-      this.updateHUD(res.progress);
+      this.playChime(false);
+      this.showToast('Idea parked. Back to what you were doing.');
       await this.loadIdeas();
       await this.loadVault(this.state.selectedVaultWindow);
     }
@@ -867,12 +857,7 @@ const App = {
   renderCoachMessages(messages) {
     const box = document.getElementById('coach-messages-box');
     box.innerHTML = messages
-      .map(
-        (m) => `
-        <div class="chat-bubble ${m.role === 'user' ? 'user' : 'coach'}">
-          ${this.formatBold(m.content)}
-        </div>`
-      )
+      .map((m) => `<div class="chat-bubble ${m.role === 'user' ? 'user' : 'coach'}">${this.formatBold(m.content.trim())}</div>`)
       .join('');
     box.scrollTop = box.scrollHeight;
   },
@@ -895,8 +880,12 @@ const App = {
 
   setTimerMinutes(mins) {
     this.resetTimer();
+    this.state.timerMinutes = mins;
     this.state.timerSeconds = mins * 60;
     this.updateTimerDisplay();
+    document.querySelectorAll('.timer-presets .chip-btn').forEach((b) => {
+      b.classList.toggle('active', Number(b.dataset.mins) === mins);
+    });
   },
 
   updateTimerDisplay() {
@@ -910,10 +899,10 @@ const App = {
     if (this.state.timerRunning) {
       clearInterval(this.state.timerInterval);
       this.state.timerRunning = false;
-      btn.textContent = '▶ Resume Body-Doubling Sprint';
+      btn.textContent = 'Resume';
     } else {
       this.state.timerRunning = true;
-      btn.textContent = '⏸ Pause Sprint';
+      btn.textContent = 'Pause';
       this.state.timerInterval = setInterval(async () => {
         if (this.state.timerSeconds > 0) {
           this.state.timerSeconds--;
@@ -921,13 +910,9 @@ const App = {
         } else {
           clearInterval(this.state.timerInterval);
           this.state.timerRunning = false;
-          btn.textContent = '▶ Start Body-Doubling Sprint';
+          btn.textContent = 'Start';
           this.playChime(true);
-          const claim = await this.api('/api/roulette/claim-instant', 'POST', {
-            xp: 30,
-            reason: '⏱️ Completed Body-Doubling Focus Sprint!',
-          });
-          this.updateHUD(claim.progress);
+          this.showToast('Time. You can stop now.');
         }
       }, 1000);
     }
@@ -936,10 +921,10 @@ const App = {
   resetTimer() {
     if (this.state.timerInterval) clearInterval(this.state.timerInterval);
     this.state.timerRunning = false;
-    this.state.timerSeconds = 15 * 60;
+    this.state.timerSeconds = (this.state.timerMinutes || 15) * 60;
     this.updateTimerDisplay();
     const btn = document.getElementById('timer-start-btn');
-    if (btn) btn.textContent = '▶ Start Body-Doubling Sprint';
+    if (btn) btn.textContent = 'Start';
   },
 
   async breakDownCustomTask(event) {
@@ -947,7 +932,7 @@ const App = {
     const input = document.getElementById('custom-task-input');
     const title = input.value.trim();
     if (!title) return;
-    this.showToast('🔨 Shrinking task into 60-second starter steps...');
+    this.showToast('Breaking it down...');
     const res = await this.api('/api/tasks/break-down', 'POST', { title });
     if (res.ok) {
       const list = document.getElementById('custom-micro-steps-list');
@@ -976,60 +961,54 @@ const App = {
     }
 
     document.getElementById('vault-celebration-summary').innerHTML = this.formatBold(data.coach_celebration_summary || '');
-    document.getElementById('vault-kpi-emails').textContent = data.emails_cleared || 0;
-    document.getElementById('vault-kpi-ideas').textContent = data.ideas_parked || 0;
 
     const listEl = document.getElementById('vault-items-list');
     const items = data.items || [];
     if (items.length === 0) {
-      listEl.innerHTML = `<div class="clean-card"><p class="card-desc">No cleared items in this time window yet.</p></div>`;
-    } else {
-      listEl.innerHTML = items
-        .map((it) => {
-          const icon = {
-            boss_defeated: '⚔️',
-            email_sent: '✉️',
-            idea_parked: '🛡️',
-            horizon_prep: '🌅',
-            notion_task: '📓',
-          }[it.item_type] || '✓';
-          const hasTarget = Boolean(it.local_file_path || it.target_url);
-          return `
-            <article class="clean-card">
-              <div class="card-meta-row">
-                <span class="source-tag">${this.escape(it.account_label)} • ${this.escape(it.cleared_at.slice(0, 16).replace('T', ' '))}</span>
-              </div>
-              ${
-                hasTarget
-                  ? `<div>
-                       <button class="target-link-pill" onclick="App.openDirectTarget('${this.escapeAttr(it.local_file_path)}', '${this.escapeAttr(it.target_url)}', '${this.escapeAttr(it.target_label || it.title)}')">
-                         ${this.escape(it.target_label || '📂 Re-Open Linked File / Task')} ↗
-                       </button>
-                     </div>`
-                  : ''
-              }
-              <h4 class="card-title ${hasTarget ? 'clickable-title' : ''}" ${
-                hasTarget
-                  ? `onclick="App.openDirectTarget('${this.escapeAttr(it.local_file_path)}', '${this.escapeAttr(it.target_url)}', '${this.escapeAttr(it.title)}')"`
-                  : ''
-              }>
-                ${icon} ${this.escape(it.title)} ${hasTarget ? '↗' : ''}
-              </h4>
-              <p class="card-desc" style="margin:0;">${this.escape(it.summary || '')}</p>
-            </article>
-          `;
-        })
-        .join('');
+      listEl.innerHTML = `<p class="empty-note">Nothing finished in this period yet.</p>`;
+      return;
     }
+    listEl.innerHTML = items
+      .map((it) => {
+        const hasTarget = Boolean(it.local_file_path || it.target_url);
+        // Older entries start with decorative emoji ("⚔️ Completed ..."); drop them
+        const title = String(it.title || '').replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, '');
+        const meta = [this.formatTimeRange(String(it.cleared_at || '').replace('T', ' ').slice(0, 16), '')];
+        if (it.account_label) meta.push(this.escape(it.account_label));
+        return `
+          <article class="task-card done-card">
+            <div class="task-main">
+              <h4 class="card-title"><span class="done-tick">✓</span> ${this.escape(title)}</h4>
+              <div class="card-meta">${meta.join(' · ')}</div>
+              ${it.summary ? `<p class="card-summary">${this.escape(this.stripXP(it.summary))}</p>` : ''}
+            </div>
+            ${
+              hasTarget
+                ? `<div class="task-actions">
+                     <button class="btn-secondary btn-sm" onclick="App.openDirectTarget('${this.escapeAttr(it.local_file_path)}', '${this.escapeAttr(it.target_url)}', '${this.escapeAttr(title)}')">Open</button>
+                   </div>`
+                : ''
+            }
+          </article>
+        `;
+      })
+      .join('');
   },
 
   async syncVaultToNotion() {
-    this.showToast('📓 Syncing Daily Briefing, Idea Incubator & Accomplishment Vault to Notion...');
+    this.showToast('Saving to Notion...');
     const res = await this.api('/api/vault/sync-notion', 'POST');
-    if (res.ok) {
+    const results = (res && res.workspaces_synced) || [];
+    const saved = results.find((r) => r.mode === 'live_notion_api' && r.page_url);
+    if (saved) {
       this.playChime(false);
-      this.showToast(`✓ Synced across ${(res.workspaces_synced || []).length} Notion Workspaces!`);
+      this.showToast('Saved to Notion. Opening the new page so you can see where it went.');
+      window.open(saved.page_url, '_blank', 'noopener');
+      return;
     }
+    // Say plainly why nothing was saved instead of claiming success
+    const reason = results.map((r) => r.note || r.warning).find(Boolean);
+    this.showToast(this.escape(reason ? `Not saved: ${reason}` : 'Not saved: no Notion page is connected to Sanctuary.'));
   },
 
   /* ------------------------------------------------------------------------

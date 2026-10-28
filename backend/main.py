@@ -310,12 +310,10 @@ class AssistantApplication:
         if method in ("GET", "POST") and path == "/api/cron/daily-briefing":
             self.live_ingest.sync_all_live_accounts(clear_demo_data=False)
             briefing_data = self.briefing.get_briefing_and_horizons()
-            notion_sync = self.vault.sync_all_to_notion()
             return 200, {
                 "ok": True,
                 "triggered_at": datetime.now().isoformat(),
                 "briefing_generated": True,
-                "notion_sync": notion_sync,
                 "headline": briefing_data.get("coach_headline"),
             }
 
@@ -406,7 +404,8 @@ def start_background_cloud_scheduler(controller: AssistantApplication) -> None:
             if hhmm == Config.BRIEFING_TIME_LOCAL and last_run_date != today_str:
                 try:
                     controller.live_ingest.sync_all_live_accounts(clear_demo_data=False)
-                    controller.vault.sync_all_to_notion()
+                    # No automatic Notion write here: it created a new page every morning under whichever
+                    # page Notion search returned first. Saving to Notion is now only on request.
                     last_run_date = today_str
                 except Exception:
                     pass

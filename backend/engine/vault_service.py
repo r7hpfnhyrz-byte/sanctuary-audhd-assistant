@@ -61,14 +61,18 @@ class AccomplishmentVaultEngine:
         ideas_parked = sum(1 for i in items if i.get("item_type") == "idea_parked")
 
         window_labels = {
-            "day": "Today (Last 24 Hours)",
-            "week": "This Week (Last 7 Days)",
-            "month": "This Month (Last 30 Days)",
-            "year": "This Year (Last 12 Months)",
+            "day": "Today",
+            "week": "This week",
+            "month": "This month",
+            "year": "This year",
         }
+
+        def count(n: int, word: str) -> str:
+            return f"{n} {word}" if n == 1 else f"{n} {word}s"
+
         narrative = (
-            f"**{window_labels.get(window, 'This period')}:** you finished **{len(items)} things**, "
-            f"handled **{emails_cleared} emails** and parked **{ideas_parked} ideas** for later."
+            f"**{window_labels.get(window, 'This period')}:** you finished **{count(len(items), 'thing')}**, "
+            f"handled **{count(emails_cleared, 'email')}** and parked **{count(ideas_parked, 'idea')}** for later."
         )
 
         return {

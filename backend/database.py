@@ -190,6 +190,12 @@ class Database:
             self._ensure_column(conn, "proactive_suggestions", "assignee", "TEXT DEFAULT ''")
             self._ensure_column(conn, "proactive_suggestions", "ai_draft", "TEXT DEFAULT ''")
             self._ensure_column(conn, "proactive_suggestions", "cleared_at", "TEXT DEFAULT ''")
+            # The original welcome message pointed at a button that no longer exists
+            conn.execute(
+                "UPDATE coach_messages SET content = ? WHERE role = 'coach' AND content LIKE '%Open & Auto-Complete%'",
+                ("Hi Rob. Tell me what's getting in the way, or tap one of the buttons above, "
+                 "and we'll work out one small next step together.",),
+            )
             self._ensure_column(conn, "triaged_emails", "target_url", "TEXT DEFAULT ''")
             self._ensure_column(conn, "triaged_emails", "local_file_path", "TEXT DEFAULT ''")
             self._ensure_column(conn, "triaged_emails", "attachment_label", "TEXT DEFAULT ''")
@@ -1013,7 +1019,7 @@ class Database:
                 INSERT INTO coach_messages (role, content, energy_mode, created_at)
                 VALUES (
                     'coach',
-                    'Hey Rob 👋 I''ve scanned your Google, Outlook, and Notion workspaces. Every single item on your dashboard is now **directly linked** to the real file, email, or calendar event—and you can click **🚀 Open & Auto-Complete** so you never have to hunt for a file or remember to come back and tick a box!',
+                    'Hi Rob. Tell me what''s getting in the way, or tap one of the buttons above, and we''ll work out one small next step together.',
                     'steady',
                     ?
                 )

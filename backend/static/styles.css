@@ -750,9 +750,9 @@ body {
 }
 
 .chip-btn:hover, .chip-btn.active {
-  border-color: var(--accent-primary);
-  color: var(--accent-primary);
-  background: var(--accent-soft);
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+  background: var(--bg-surface);
 }
 
 .input-clean, .textarea-clean, .select-clean {
@@ -947,8 +947,8 @@ body {
 
 .chat-bubble.user {
   align-self: flex-end;
-  background: var(--accent-primary);
-  color: #fff;
+  background: var(--text-primary);
+  color: var(--bg-surface);
 }
 
 .coach-input-bar, .micro-breaker-form {
@@ -962,7 +962,7 @@ body {
   font-weight: 800;
   text-align: center;
   margin: 12px 0;
-  color: var(--accent-primary);
+  color: var(--text-primary);
 }
 
 .timer-presets, .timer-controls {
@@ -1572,4 +1572,96 @@ body {
   padding: 8px 10px;
   margin-top: 6px;
   word-break: break-word;
+}
+
+/* ==========================================================================
+   OTHER TABS: same calm pattern as Today
+   ========================================================================== */
+.tab-intro {
+  margin-bottom: 18px;
+}
+
+.tab-intro-text {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.card-summary {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  margin-top: 6px;
+}
+
+.stack-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.form-submit-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.tool-panel {
+  margin-top: 24px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+
+.tool-panel > summary {
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.tool-panel[open] > summary {
+  margin-bottom: 10px;
+}
+
+.tool-panel-note {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.card-more .textarea-clean {
+  margin-bottom: 4px;
+}
+
+.done-card .card-title {
+  font-weight: 600;
+}
+
+#tab-sandbox .tool-card {
+  margin-bottom: 4px;
+}
+
+.quick-prompt-pills {
+  margin-top: 0;
+}
+
+@media (max-width: 640px) {
+  .sandbox-input-row,
+  .micro-breaker-form {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+}
+
+.tool-card-desc {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+
+.micro-breaker-form .btn-secondary {
+  white-space: nowrap;
+}
+
+#tab-vault .section-header-bar {
+  align-items: center;
 }
