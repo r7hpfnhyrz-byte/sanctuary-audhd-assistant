@@ -1,0 +1,13 @@
+{
+  "extraKnownMarketplaces": {
+    "robonuggets": {
+      "source": {
+        "source": "github",
+        "repo": "robonuggets/ribbon"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "ribbon@robonuggets": true
+  }
+}
